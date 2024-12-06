@@ -26,17 +26,17 @@
 #define NUM_CHANNELS 6									// Number of channels supported
 #define HEADER_LEN 3									// Header = SYNC_BYTE_1 + SYNC_BYTE_2 + Counter
 #define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN + 1)	// Packet length = Header + Data + END_BYTE
-#define SAMP_RATE 250.0									// Sampling rate (250 for UNO R3)
+#define SAMP_RATE 250.0									// Sampling rate (250 for UNO R3 (ATMEGA328P) clone)
 #define SYNC_BYTE_1 0xC7								// Packet first byte
 #define SYNC_BYTE_2 0x7C								// Packet second byte
 #define END_BYTE 0x01									// Packet last byte
-#define BAUD_RATE 230400								// Serial connection baud rate
+#define BAUD_RATE 115200								// Serial connection baud rate (115200 for Clone board)
 
 // Global constants and variables
 uint8_t packetBuffer[PACKET_LEN];	// The transmission packet
 uint8_t currentChannel;				// Current channel being sampled
 uint16_t ADCValue = 0;				// ADC current value
-bool timerStatus = false;			// SATUS bit
+bool timerStatus = false;			// Timer status bit
 bool bufferReady = false;			// Buffer ready status bit
 
 bool timerStart()
@@ -120,10 +120,10 @@ void setup()
 	digitalWrite(LED_BUILTIN, LOW);
 
 	// Initialize packetBuffer
-	packetBuffer[0] = SYNC_BYTE_1; // Sync 0
-	packetBuffer[1] = SYNC_BYTE_2; // Sync 1
-	packetBuffer[2] = 0;		   // Packet counter
-	packetBuffer[PACKET_LEN-1] = END_BYTE;   // End Byte
+	packetBuffer[0] = SYNC_BYTE_1;			// Sync 0
+	packetBuffer[1] = SYNC_BYTE_2;			// Sync 1
+	packetBuffer[2] = 0;					// Packet counter
+	packetBuffer[PACKET_LEN -1] = END_BYTE;	// End Byte
 
 	timerBegin(SAMP_RATE);
 }
@@ -145,7 +145,7 @@ void loop()
 		// Who are you?
 		if (command == "WHORU")
 		{
-			Serial.println("UNO-R3");
+			Serial.println("UNO-CLONE");
 		}
 
 		// Start data acquisition
