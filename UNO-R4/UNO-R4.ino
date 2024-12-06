@@ -1,4 +1,3 @@
-
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
@@ -116,8 +115,9 @@ void setup()
 	packetBuffer[2] = 0;		   // Packet counter
 	packetBuffer[PACKET_LEN-1] = END_BYTE;   // End Byte
 
+	// Setup timer
 	timerBegin(SAMP_RATE);
-
+	// Set ADC resolution to 14bit
 	analogReadResolution(14);
 }
 
