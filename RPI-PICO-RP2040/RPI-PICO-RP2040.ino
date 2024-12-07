@@ -34,24 +34,22 @@
 #define BAUD_RATE 230400                                // Serial connection baud rate
 
 // Global constants and variables
-uint8_t packetBuffer[PACKET_LEN];   // The transmission packet
-uint8_t currentChannel              // Current channel being sampled
-uint16_t ADCValue = 0;              // ADC current value
-bool timerStatus = false;           // Timer status bit
-bool bufferReady = false;           // Buffer ready status bit
+uint8_t packetBuffer[PACKET_LEN];  // The transmission packet
+uint8_t currentChannel;            // Current channel being sampled
+uint16_t ADCValue = 0;             // ADC current value
+bool timerStatus = false;          // Timer status bit
+bool bufferReady = false;          // Buffer ready status bit
 
 mbed::Ticker ticker;
 
 // callback method used by timer
-void timerCallback()
-{
+void timerCallback() {
   // Read ADC inputs and store current values in packetBuffer
-  for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++)
-  {
+  for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++) {
     adc_select_input(currentChannel);
-    ADCValue = adc_read();                        // Read Analog input
-    packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(ADCValue);    // Write High Byte
-    packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(ADCValue); // Write Low Byte
+    ADCValue = adc_read();                                                      // Read Analog input
+    packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(ADCValue);     // Write High Byte
+    packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(ADCValue);  // Write Low Byte
   }
 
   // Increment the packet counter
@@ -60,30 +58,26 @@ void timerCallback()
   bufferReady = true;
 }
 
-void timerStart()
-{ 
-        timerStatus = true;
-        auto interval = std::chrono::microseconds(static_cast<int>(1e6 / SAMP_RATE));
-        ticker.attach(&timerCallback, interval);
-        digitalWrite(LED_BUILTIN, HIGH);
+void timerStart() {
+  timerStatus = true;
+  auto interval = std::chrono::microseconds(static_cast<int>(1e6 / SAMP_RATE));
+  ticker.attach(&timerCallback, interval);
+  digitalWrite(LED_BUILTIN, HIGH);
 }
 
-void timerStop()
-{ 
-        timerStatus = false;
-        bufferReady = false;
-        ticker.detach();
-        digitalWrite(LED_BUILTIN, LOW);
+void timerStop() {
+  timerStatus = false;
+  bufferReady = false;
+  ticker.detach();
+  digitalWrite(LED_BUILTIN, LOW);
 }
 
-void setup()
-{
+void setup() {
 
-  Serial.begin(BAUD_RATE);  
+  Serial.begin(BAUD_RATE);
   Serial.setTimeout(100);
-  while (!Serial)
-  {
-    ; // Wait for serial port to connect. Needed for native USB
+  while (!Serial) {
+    ;  // Wait for serial port to connect. Needed for native USB
   }
 
   // Status LED
@@ -91,70 +85,55 @@ void setup()
   digitalWrite(LED_BUILTIN, LOW);
 
   // Initialize packetBuffer
-  packetBuffer[0] = SYNC_BYTE_1; // Sync 0
-  packetBuffer[1] = SYNC_BYTE_2; // Sync 1
-  packetBuffer[2] = 0;       // Packet counter
-  packetBuffer[PACKET_LEN-1] = END_BYTE;   // End Byte
-    // Initialize ADC
-    adc_init();                       // Initialize the ADC hardware
-    adc_gpio_init(26);           // Initialize GPIO26 -> ADC0
-    adc_gpio_init(27);           // Initialize GPIO27 -> ADC1
-    adc_gpio_init(28);           // Initialize GPIO28 -> ADC2
+  packetBuffer[0] = SYNC_BYTE_1;            // Sync 0
+  packetBuffer[1] = SYNC_BYTE_2;            // Sync 1
+  packetBuffer[2] = 0;                      // Packet counter
+  packetBuffer[PACKET_LEN - 1] = END_BYTE;  // End Byte
+  // Initialize ADC
+  adc_init();         // Initialize the ADC hardware
+  adc_gpio_init(26);  // Initialize GPIO26 -> ADC0
+  adc_gpio_init(27);  // Initialize GPIO27 -> ADC1
+  adc_gpio_init(28);  // Initialize GPIO28 -> ADC2
 
-    // Set ADC resolution (the RP2040 ADC supports native 12-bit resolution)
-    adc_set_clkdiv(1);                // Ensure maximum ADC clock speed
-    adc_fifo_setup(
-        true,                         // Enable FIFO
-        false,                        // No DMA requested
-        1,                            // DREQ (threshold for DMA) not used
-        true,                         // Set to true to shift results to 12 bits
-        false                         // Don't enable error on overflow
-    );
+  // Set ADC resolution (the RP2040 ADC supports native 12-bit resolution)
+  adc_set_clkdiv(1);  // Ensure maximum ADC clock speed
+  adc_fifo_setup(
+    true,   // Enable FIFO
+    false,  // No DMA requested
+    1,      // DREQ (threshold for DMA) not used
+    true,   // Set to true to shift results to 12 bits
+    false   // Don't enable error on overflow
+  );
 }
 
-void loop()
-{
-  if(bufferReady and timerStatus){
-      // Send Packet over serial
-  Serial.write(packetBuffer, PACKET_LEN);
-  bufferReady = false;
+void loop() {
+  // Send data if the buffer is ready and the timer is activ
+  if (timerStatus and bufferReady) {
+    Serial.write(packetBuffer, PACKET_LEN);
+    bufferReady = false;
   }
-  
-  if (Serial.available())
-  {
-    // Read command
-    String command = Serial.readString();
-    command.trim();
 
-    // Who are you?
-    if (command == "WHORU")
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();         // Remove extra spaces or newline characters
+    command.toUpperCase();  // Normalize to uppercase for case-insensitivity
+
+    if (command == "WHORU")  // Who are you?
     {
       Serial.println("RPI-PICO-RP2040");
-    }
-
-    // Start data acquisition
-    if (command == "START")
+    } else if (command == "START")  // Start data acquisition
     {
       timerStart();
-    }
-
-    // Stop data acquisition
-    if (command == "STOP")
+    } else if (command == "STOP")  // Stop data acquisition
     {
       timerStop();
     }
 
-    // Get status
-    if (command == "STATUS")
+    else if (command == "STATUS")  // Get status
     {
-      if (timerStatus)
-      {
-        Serial.println("START");
-      }
-      else
-      {
-        Serial.println("STOP");
-      }
+      Serial.println(timerStatus ? "RUNNING" : "STOPPED");
+    } else {
+      Serial.println("UNKNOWN COMMAND");
     }
   }
 }
