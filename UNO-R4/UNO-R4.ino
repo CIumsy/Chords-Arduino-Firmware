@@ -1,4 +1,3 @@
-
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
@@ -34,24 +33,25 @@
 #define BAUD_RATE 230400							   // Serial connection baud rate
 
 // Global constants and variables
-uint8_t PacketBuffer[PACKET_LEN]; // The transmission packet
-uint8_t CurrentChannel;			  // Current channel being sampled
-uint8_t PacketCounter = 0;		  // Counter for current packet
-uint16_t ADCValue = 0;			  // ADC current value
-bool STATUS = false;			  // STATUS bit
+uint8_t packetBuffer[PACKET_LEN];	// The transmission packet
+uint8_t currentChannel;				// Current channel being sampled
+uint16_t ADCValue = 0;				// ADC current value
+bool timerStatus = false;			// Timer status bit
+bool bufferReady = false;			// Buffer ready status bit			
 
 FspTimer ChordsTimer;
 
 bool timerStart()
 {
-	STATUS = true;
+	timerStatus = true;
 	digitalWrite(LED_BUILTIN, HIGH);
 	return ChordsTimer.start();
 }
 
 bool timerStop()
 {
-	STATUS = false;
+	timerStatus = false;
+  bufferReady = false;
 	digitalWrite(LED_BUILTIN, LOW);
 	return ChordsTimer.stop();
 }
@@ -59,24 +59,24 @@ bool timerStop()
 // callback method used by timer
 void timerCallback(timer_callback_args_t __attribute((unused)) * p_args)
 {
-	if (!STATUS or Serial.available())
+	if (!timerStatus or Serial.available())
 	{
 		timerStop();
 		return;
 	}
-	// Read 6ch ADC inputs and store current values in PacketBuffer
-	for (CurrentChannel = 0; CurrentChannel < NUM_CHANNELS; CurrentChannel++)
+	// Read 6ch ADC inputs and store current values in packetBuffer
+	for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++)
 	{
-		ADCValue = analogRead(CurrentChannel);									   // Read Analog input
-		PacketBuffer[((2 * CurrentChannel) + HEADER_LEN)] = highByte(ADCValue);	   // Write High Byte
-		PacketBuffer[((2 * CurrentChannel) + HEADER_LEN + 1)] = lowByte(ADCValue); // Write Low Byte
+		ADCValue = analogRead(currentChannel);									   // Read Analog input
+		packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(ADCValue);	   // Write High Byte
+		packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(ADCValue); // Write Low Byte
 	}
 
-	// Send Packet over serial
-	Serial.write(PacketBuffer, PACKET_LEN);
-
 	// Increment the packet counter
-	PacketBuffer[2]++;
+	packetBuffer[2]++;
+
+	// Set bufferReady status bit to true
+	bufferReady = true;
 }
 
 bool timerBegin(float sampling_rate)
@@ -109,31 +109,26 @@ void setup()
 	pinMode(LED_BUILTIN, OUTPUT);
 	digitalWrite(LED_BUILTIN, LOW);
 
-	// Initialize PacketBuffer
-	PacketBuffer[0] = SYNC_BYTE_1; // Sync 0
-	PacketBuffer[1] = SYNC_BYTE_2; // Sync 1
-	PacketBuffer[2] = 0;		   // Packet counter
-	PacketBuffer[3] = 0x02;		   // CH1 High Byte
-	PacketBuffer[4] = 0x00;		   // CH1 Low Byte
-	PacketBuffer[5] = 0x02;		   // CH2 High Byte
-	PacketBuffer[6] = 0x00;		   // CH2 Low Byte
-	PacketBuffer[7] = 0x02;		   // CH3 High Byte
-	PacketBuffer[8] = 0x00;		   // CH3 Low Byte
-	PacketBuffer[9] = 0x02;		   // CH4 High Byte
-	PacketBuffer[10] = 0x00;	   // CH4 Low Byte
-	PacketBuffer[11] = 0x02;	   // CH5 High Byte
-	PacketBuffer[12] = 0x00;	   // CH5 Low Byte
-	PacketBuffer[13] = 0x02;	   // CH6 High Byte
-	PacketBuffer[14] = 0x00;	   // CH6 Low Byte
-	PacketBuffer[15] = END_BYTE;   // End Byte
+	// Initialize packetBuffer
+	packetBuffer[0] = SYNC_BYTE_1; // Sync 0
+	packetBuffer[1] = SYNC_BYTE_2; // Sync 1
+	packetBuffer[2] = 0;		   // Packet counter
+	packetBuffer[PACKET_LEN-1] = END_BYTE;   // End Byte
 
+	// Setup timer
 	timerBegin(SAMP_RATE);
-
+	// Set ADC resolution to 14bit
 	analogReadResolution(14);
 }
 
 void loop()
 {
+	if(timerStatus and bufferReady){
+		// Send Packet over serial
+		Serial.write(packetBuffer, PACKET_LEN);
+		bufferReady = false;
+	}
+
 	if (Serial.available())
 	{
 		// Read command
@@ -161,7 +156,7 @@ void loop()
 		// Get status
 		if (command == "STATUS")
 		{
-			if (STATUS)
+			if (timerStatus)
 			{
 				Serial.println("START");
 			}
