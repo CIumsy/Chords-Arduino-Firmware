@@ -35,7 +35,7 @@
 // Global constants and variables
 uint8_t packetBuffer[PACKET_LEN];  // The transmission packet
 uint8_t currentChannel;            // Current channel being sampled
-uint16_t ADCValue = 0;             // ADC current value
+uint16_t adcValue = 0;             // ADC current value
 bool timerStatus = false;          // Timer status bit
 bool bufferReady = false;          // Buffer ready status bit
 
@@ -61,9 +61,9 @@ void timerCallback(timer_callback_args_t __attribute((unused)) * p_args) {
   }
   // Read 6ch ADC inputs and store current values in packetBuffer
   for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++) {
-    ADCValue = analogRead(currentChannel);                                      // Read Analog input
-    packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(ADCValue);     // Write High Byte
-    packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(ADCValue);  // Write Low Byte
+    adcValue = analogRead(currentChannel);                                      // Read Analog input
+    packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(adcValue);     // Write High Byte
+    packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(adcValue);  // Write Low Byte
   }
 
   // Increment the packet counter
