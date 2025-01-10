@@ -13,10 +13,11 @@ boards into bio-potential data acquisition devices when paired with BioAmp hardw
 
 ## Supported boards
 
-| Board | Voltage | Resolution | SamplingRate | BaudRate | Code |
-| ----- | ------- | ---------- | ------------ | -------- | ---- |
-| Arduino GIGA R1 (WiFi) | 3V3 | 16-bit | 500 | 230400 | [GIGA-R1.ino](GIGA-R1/GIGA-R1.ino) |
-| Arduino UNO R4 Minima/WiFi | 5V | 14-bit | 500 | 230400 | [UNO-R4.ino](UNO-R4/UNO-R4.ino) |
-| Arduino UNO R3 | 5V | 10-bit | 250 | 230400 | [UNO-R3.ino](UNO-R3/UNO-R3.ino) |
-| Raspberry PI Pico | 3V3 | 12-bit | 500 | 230400 | [RPI-PICO-RP2040.ino](RPI-PICO-RP2040/RPI-PICO-RP2040.ino) |
-| UNO R3 Clone (CH340) | 5V | 10-bit | 250 | 115200 | [UNO-CLONE.ino](UNO-CLONE/UNO-CLONE.ino) |
+| Board | Voltage | Channels | Resolution | SamplingRate | BaudRate | Code |
+| ----- | ------- | -------- | ---------- | ------------ | -------- | ---- |
+| Arduino GIGA R1 (WiFi) | 3V3 | 6 | 16-bit | 500 | 230400 | [GIGA-R1.ino](GIGA-R1/GIGA-R1.ino) |
+| Arduino UNO R4 Minima/WiFi | 5V | 6 | 14-bit | 500 | 230400 | [UNO-R4.ino](UNO-R4/UNO-R4.ino) |
+| Arduino UNO R3 | 5V | 6 | 10-bit | 250 | 230400 | [UNO-R3.ino](UNO-R3/UNO-R3.ino) |
+| Raspberry PI Pico | 3V3 | 3 | 12-bit | 500 | 230400 | [RPI-PICO-RP2040.ino](RPI-PICO-RP2040/RPI-PICO-RP2040.ino) |
+| Nano Clone (CH340) | 5V | 8 |  10-bit | 250 | 115200 | [NANO-CLONE.ino](NANO-CLONE/NANO-CLONE.ino) |
+| UNO R3 Clone (CH340) | 5V | 6 | 10-bit | 250 | 115200 | [UNO-CLONE.ino](UNO-CLONE/UNO-CLONE.ino) |
