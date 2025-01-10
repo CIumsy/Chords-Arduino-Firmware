@@ -23,27 +23,29 @@
 #include <Arduino_AdvancedAnalog.h>
 
 // Definitions
-#define NUM_CHANNELS 6                                  // Number of channels supported
-#define HEADER_LEN 3                                    // Header = SYNC_BYTE_1 + SYNC_BYTE_2 + Counter
-#define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN + 1)  // Packet length = Header + Data + END_BYTE
-#define ADC_SAMPLING 16000                              // ADC sampling rate
-#define ADC_QUEUE 256                                   // ADC Qeueue depth
-#define SAMPLES_CHANNEL 32                              // Samples per channel
-#define SAMP_RATE ADC_SAMPLING / SAMPLES_CHANNEL        // CHORDS Sampling rate (250/500 for GIGA R1 WiFi)
-#define SYNC_BYTE_1 0xC7                                // Packet first byte
-#define SYNC_BYTE_2 0x7C                                // Packet second byte
-#define END_BYTE 0x01                                   // Packet last byte
-#define BAUD_RATE 230400                                // Serial connection baud rate
+#define NUM_CHANNELS 6                              // Number of channels supported
+#define HEADER_LEN 4                                // Header = SYNC_BYTE_1 + SYNC_BYTE_2 + Counter +
+#define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN)  // Packet length = Header + Data + END_BYTE
+#define ADC_SAMPLING 16000                          // ADC sampling rate
+#define ADC_QUEUE 256                               // ADC Qeueue depth
+#define ADC_RES 16                                  // ADC Resolutiton
+#define SAMPLES_CHANNEL 32                          // Samples per channel
+#define SAMP_RATE ADC_SAMPLING / SAMPLES_CHANNEL    // CHORDS Sampling rate (250/500 for GIGA R1 WiFi)
+#define SYNC_BYTE_1 0xC7                            // Packet first byte
+#define SYNC_BYTE_2 0x7C                            // Packet second byte
+#define BAUD_RATE 230400                            // Serial connection baud rate
 
 // Global constants and variables
 uint8_t packetBuffer[PACKET_LEN];  // The transmission packet
 uint8_t currentChannel;            // Current channel being sampled
+bool adcStatus = false;            // Timer status bit
 uint16_t adcValue = 0;             // ADC current value
 
 // Channel to use from A0 - A11
 AdvancedADC adc(A0, A1, A2, A3, A4, A5);
 
 void adcStart() {
+  adcStatus = true;
   digitalWrite(LED_BUILTIN, LOW);
   // Resolution, sample rate, number of samples per channel, queue depth.
   if (!adc.begin(AN_RESOLUTION_16, ADC_SAMPLING, SAMPLES_CHANNEL, ADC_QUEUE, true)) {
@@ -54,6 +56,7 @@ void adcStart() {
 }
 
 void adcStop() {
+  adcStatus = false;
   digitalWrite(LED_BUILTIN, HIGH);
   adc.stop();
 }
@@ -66,18 +69,19 @@ void setup() {
 
   // Status LED
   pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(LED_BUILTIN, HIGH);
 
   // Initialize packetBuffer
-  packetBuffer[0] = SYNC_BYTE_1;            // Sync 0
-  packetBuffer[1] = SYNC_BYTE_2;            // Sync 1
-  packetBuffer[2] = 0;                      // Packet counter
-  packetBuffer[PACKET_LEN - 1] = END_BYTE;  // End Byte
+  packetBuffer[0] = SYNC_BYTE_1;  // Sync 0
+  packetBuffer[1] = SYNC_BYTE_2;  // Sync 1
+  packetBuffer[2] = 0;            // Packet counter
+  packetBuffer[3] = ((NUM_CHANNELS << 4) - 1)
+                    | (ADC_RES - 10);  // Config Byte
 }
 
 void loop() {
   // Send data if the buffer is ready and the timer is activ
-  if (adc.available()) {
+  if (adcStatus and adc.available()) {
     SampleBuffer adcBuffer = adc.read();
     // Read 6ch ADC inputs and store current values in packetBuffer
     for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++) {
