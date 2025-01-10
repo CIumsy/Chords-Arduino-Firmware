@@ -127,9 +127,7 @@ void loop() {
     } else if (command == "STOP")  // Stop data acquisition
     {
       timerStop();
-    }
-
-    else if (command == "STATUS")  // Get status
+    } else if (command == "STATUS")  // Get status
     {
       Serial.println(timerStatus ? "RUNNING" : "STOPPED");
     } else {
