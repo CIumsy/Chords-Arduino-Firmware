@@ -22,30 +22,40 @@
 #include <Arduino.h>
 
 // Definitions
-#define NUM_CHANNELS 6                                  // Number of channels supported
-#define HEADER_LEN 3                                    // Header = SYNC_BYTE_1 + SYNC_BYTE_2 + Counter
-#define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN + 1)  // Packet length = Header + Data + END_BYTE
-#define SAMP_RATE 250.0                                 // Sampling rate (250 for UNO R3)
-#define SYNC_BYTE_1 0xC7                                // Packet first byte
-#define SYNC_BYTE_2 0x7C                                // Packet second byte
-#define END_BYTE 0x01                                   // Packet last byte
-#define BAUD_RATE 230400                                // Serial connection baud rate
+#define NUM_CHANNELS 6                                 // Number of channels supported
+#define HEADER_LEN 3                                   // Header = SYNC_BYTE_1 + SYNC_BYTE_2 + Counter
+#define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN + 1) // Packet length = Header + Data + END_BYTE
+#define SAMP_RATE 250.0                                // Sampling rate (250 for UNO R3)
+#define SYNC_BYTE_1 0xC7                               // Packet first byte
+#define SYNC_BYTE_2 0x7C                               // Packet second byte
+#define END_BYTE 0x01                                  // Packet last byte
+#define BAUD_RATE 230400                               // Serial connection baud rate
+
+// defines for setting and clearing register bits
+#ifndef cbi
+#define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
+#endif
+#ifndef sbi
+#define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
+#endif
 
 // Global constants and variables
-uint8_t packetBuffer[PACKET_LEN];  // The transmission packet
-uint8_t currentChannel;            // Current channel being sampled
-uint16_t adcValue = 0;             // ADC current value
-bool timerStatus = false;          // SATUS bit
-bool bufferReady = false;          // Buffer ready status bit
+uint8_t packetBuffer[PACKET_LEN]; // The transmission packet
+uint8_t currentChannel;           // Current channel being sampled
+uint16_t adcValue = 0;            // ADC current value
+bool timerStatus = false;         // SATUS bit
+bool bufferReady = false;         // Buffer ready status bit
 
-bool timerStart() {
+bool timerStart()
+{
   timerStatus = true;
   digitalWrite(LED_BUILTIN, HIGH);
   // Enable Timer1 Compare A interrupt
   return TIMSK1 |= (1 << OCIE1A);
 }
 
-bool timerStop() {
+bool timerStop()
+{
   timerStatus = false;
   bufferReady = false;
   digitalWrite(LED_BUILTIN, LOW);
@@ -54,17 +64,29 @@ bool timerStop() {
 }
 
 // ISR for Timer1 Compare A match (called based on the sampling rate)
-ISR(TIMER1_COMPA_vect) {
-  if (!timerStatus or Serial.available()) {
+ISR(TIMER1_COMPA_vect)
+{
+  if (!timerStatus or Serial.available())
+  {
     timerStop();
     return;
   }
 
-  // Read 6ch ADC inputs and store current values in packetBuffer
-  for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++) {
-    adcValue = analogRead(currentChannel);                                      // Read Analog input
-    packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(adcValue);     // Write High Byte
-    packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(adcValue);  // Write Low Byte
+  // ADC value Reading, Converting, and Storing:
+
+  for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++)
+  {
+    // Read ADC inputs with software oversampling.
+    adcValue = 0;
+    for (uint8_t savgcntr = 0; savgcntr < 4; savgcntr++)
+    {
+      adcValue += analogRead(currentChannel);
+    }
+    // Convert it back to 10bit value to remove noise.
+    adcValue = adcValue >> 2;
+    // Store current values in packetBuffer to send.
+    packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(adcValue);    // Write High Byte
+    packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(adcValue); // Write Low Byte
   }
 
   // Increment the packet counter
@@ -74,31 +96,41 @@ ISR(TIMER1_COMPA_vect) {
   bufferReady = true;
 }
 
-void timerBegin(float sampling_rate) {
-  cli();  // Disable global interrupts
+void timerBegin(float sampling_rate)
+{
+  cli(); // Disable global interrupts
+
+  // Make ADC sample faster. Change ADC clock
+  // Change prescaler division factor to 16
+  sbi(ADCSRA, ADPS2); // 1
+  cbi(ADCSRA, ADPS1); // 0
+  cbi(ADCSRA, ADPS0); // 0
 
   // Calculate OCR1A based on the interval
   // OCR1A = (16MHz / (Prescaler * Desired Time)) - 1
   // Prescaler options: 1, 8, 64, 256, 1024
-  unsigned long ocrValue = (16000000 / (64 * sampling_rate)) - 1;
+  unsigned long ocrValue = (16000000 / (8 * sampling_rate)) - 1;
 
   // Configure Timer1 for CTC mode (Clear Timer on Compare Match)
-  TCCR1A = 0;  // Clear control register A
-  TCCR1B = 0;  // Clear control register B
-
-  // Set CTC mode (WGM12 bit) and set the prescaler to 64
-  TCCR1B |= (1 << WGM12) | (1 << CS11) | (1 << CS10);  // Prescaler = 64
+  TCCR1A = 0; // Clear control register A
+  TCCR1B = 0; // Clear control register B
+  TCNT1 = 0;  // Clear counter value
 
   // Set the calculated value in OCR1A register
   OCR1A = ocrValue;
 
-  sei();  // Enable global interrupts
+  // Set CTC mode (WGM12 bit) and set the prescaler to 8
+  TCCR1B |= (1 << WGM12) | (1 << CS11); // Prescaler = 8
+
+  sei(); // Enable global interrupts
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(BAUD_RATE);
-  while (!Serial) {
-    ;  // Wait for serial port to connect. Needed for native USB
+  while (!Serial)
+  {
+    ; // Wait for serial port to connect. Needed for native USB
   }
 
   // Status LED
@@ -106,40 +138,48 @@ void setup() {
   digitalWrite(LED_BUILTIN, LOW);
 
   // Initialize packetBuffer
-  packetBuffer[0] = SYNC_BYTE_1;            // Sync 0
-  packetBuffer[1] = SYNC_BYTE_2;            // Sync 1
-  packetBuffer[2] = 0;                      // Packet counter
-  packetBuffer[PACKET_LEN - 1] = END_BYTE;  // End Byte
+  packetBuffer[0] = SYNC_BYTE_1;           // Sync 0
+  packetBuffer[1] = SYNC_BYTE_2;           // Sync 1
+  packetBuffer[2] = 0;                     // Packet counter
+  packetBuffer[PACKET_LEN - 1] = END_BYTE; // End Byte
 
   // Setup timer
   timerBegin(SAMP_RATE);
 }
 
-void loop() {
+void loop()
+{
   // Send data if the buffer is ready and the timer is activ
-  if (timerStatus and bufferReady) {
+  if (timerStatus and bufferReady)
+  {
     Serial.write(packetBuffer, PACKET_LEN);
     bufferReady = false;
   }
 
-  if (Serial.available()) {
+  if (Serial.available())
+  {
     String command = Serial.readStringUntil('\n');
-    command.trim();         // Remove extra spaces or newline characters
-    command.toUpperCase();  // Normalize to uppercase for case-insensitivity
+    command.trim();        // Remove extra spaces or newline characters
+    command.toUpperCase(); // Normalize to uppercase for case-insensitivity
 
-    if (command == "WHORU")  // Who are you?
+    if (command == "WHORU") // Who are you?
     {
       Serial.println("UNO-R3");
-    } else if (command == "START")  // Start data acquisition
+    }
+    else if (command == "START") // Start data acquisition
     {
       timerStart();
-    } else if (command == "STOP")  // Stop data acquisition
+    }
+    else if (command == "STOP") // Stop data acquisition
     {
       timerStop();
-    } else if (command == "STATUS")  // Get status
+    }
+    else if (command == "STATUS") // Get status
     {
       Serial.println(timerStatus ? "RUNNING" : "STOPPED");
-    } else {
+    }
+    else
+    {
       Serial.println("UNKNOWN COMMAND");
     }
   }
