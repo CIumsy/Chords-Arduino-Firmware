@@ -21,15 +21,68 @@
 
 #include <Arduino.h>
 
-// Definitions
-#define NUM_CHANNELS 6                                  // Number of channels supported
+
+/** 
+** Select your board from list below
+** Uncomment only your board macro
+**/
+
+// #define BOARD_NANO_CLONE
+// #define BOARD_NANO_CLASSIC
+// #define BOARD_UNO_R3
+// #define BOARD_UNO_CLONE
+// #define BOARD_MEGA_2560_R3
+#define BOARD_MEGA_2560_CLONE
+
+// Board specific macros
+#if defined(BOARD_UNO_R3)
+#define BOARD_NAME "UNO-R3"
+#define NUM_CHANNELS 6
+#define SAMP_RATE 500
+#define BAUD_RATE 230400
+#elif defined(BOARD_UNO_CLONE)
+#define BOARD_NAME "UNO-CLONE"
+#define NUM_CHANNELS 6
+#define SAMP_RATE 250
+#define BAUD_RATE 115200
+#elif defined(BOARD_NANO_CLASSIC)
+#define BOARD_NAME "NANO-CLASSIC"
+#define NUM_CHANNELS 8
+#define SAMP_RATE 500
+#define BAUD_RATE 230400
+#elif defined(BOARD_NANO_CLONE)
+#define BOARD_NAME "NANO-CLONE"
+#define NUM_CHANNELS 8
+#define SAMP_RATE 250
+#define BAUD_RATE 115200
+#elif defined(BOARD_MEGA_2560_R3)
+#define BOARD_NAME "MEGA-2560-R3"
+#define NUM_CHANNELS 16
+#define SAMP_RATE 500
+#define BAUD_RATE 230400
+#elif defined(BOARD_MEGA_2560_CLONE)
+#define BOARD_NAME "MEGA-2560-CLONE"
+#define NUM_CHANNELS 16
+#define SAMP_RATE 250
+#define BAUD_RATE 115200
+#else
+#error "Board type not defined. Please define a valid BOARD_NAME macro."
+#endif
+
+// Common macros
 #define HEADER_LEN 3                                    // Header = SYNC_BYTE_1 + SYNC_BYTE_2 + Counter
 #define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN + 1)  // Packet length = Header + Data + END_BYTE
-#define SAMP_RATE 250.0                                 // Sampling rate (250 for UNO R3)
 #define SYNC_BYTE_1 0xC7                                // Packet first byte
 #define SYNC_BYTE_2 0x7C                                // Packet second byte
 #define END_BYTE 0x01                                   // Packet last byte
-#define BAUD_RATE 115200                                // Serial connection baud rate
+
+// defines for setting and clearing register bits
+#ifndef cbi
+#define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
+#endif
+#ifndef sbi
+#define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
+#endif
 
 // Global constants and variables
 uint8_t packetBuffer[PACKET_LEN];  // The transmission packet
@@ -60,16 +113,6 @@ ISR(TIMER1_COMPA_vect) {
     return;
   }
 
-  // Read 6ch ADC inputs and store current values in packetBuffer
-  for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++) {
-    adcValue = analogRead(currentChannel);                                      // Read Analog input
-    packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(adcValue);     // Write High Byte
-    packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(adcValue);  // Write Low Byte
-  }
-
-  // Increment the packet counter
-  packetBuffer[2]++;
-
   // Set bufferReady status bit to true
   bufferReady = true;
 }
@@ -77,20 +120,26 @@ ISR(TIMER1_COMPA_vect) {
 void timerBegin(float sampling_rate) {
   cli();  // Disable global interrupts
 
+  // Set prescaler division factor to 16
+  sbi(ADCSRA, ADPS2);  // 1
+  cbi(ADCSRA, ADPS1);  // 0
+  cbi(ADCSRA, ADPS0);  // 0
+
   // Calculate OCR1A based on the interval
   // OCR1A = (16MHz / (Prescaler * Desired Time)) - 1
   // Prescaler options: 1, 8, 64, 256, 1024
-  unsigned long ocrValue = (16000000 / (64 * sampling_rate)) - 1;
+  unsigned long ocrValue = (16000000 / (8 * sampling_rate)) - 1;
 
   // Configure Timer1 for CTC mode (Clear Timer on Compare Match)
   TCCR1A = 0;  // Clear control register A
   TCCR1B = 0;  // Clear control register B
-
-  // Set CTC mode (WGM12 bit) and set the prescaler to 64
-  TCCR1B |= (1 << WGM12) | (1 << CS11) | (1 << CS10);  // Prescaler = 64
+  TCNT1 = 0;   // Clear counter value
 
   // Set the calculated value in OCR1A register
   OCR1A = ocrValue;
+
+  // Set CTC mode (WGM12 bit) and set the prescaler to 8
+  TCCR1B |= (1 << WGM12) | (1 << CS11);  // Prescaler = 8
 
   sei();  // Enable global interrupts
 }
@@ -118,7 +167,23 @@ void setup() {
 void loop() {
   // Send data if the buffer is ready and the timer is activ
   if (timerStatus and bufferReady) {
+
+    // ADC value Reading, Converting, and Storing:
+    for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++) {
+
+      // Read ADC input
+      adcValue = analogRead(currentChannel);
+
+      // Store current values in packetBuffer to send.
+      packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(adcValue);     // Write High Byte
+      packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(adcValue);  // Write Low Byte
+    }
+
+    // Increment the packet counter
+    packetBuffer[2]++;
+    // Send the packetBuffer to the Serial port
     Serial.write(packetBuffer, PACKET_LEN);
+    // Reset the bufferReady flag
     bufferReady = false;
   }
 
@@ -129,7 +194,7 @@ void loop() {
 
     if (command == "WHORU")  // Who are you?
     {
-      Serial.println("UNO-CLONE");
+      Serial.println(BOARD_NAME);
     } else if (command == "START")  // Start data acquisition
     {
       timerStart();
