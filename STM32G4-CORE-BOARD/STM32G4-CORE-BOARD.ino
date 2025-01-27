@@ -1,4 +1,4 @@
-// Chords Firmware for STM32F401 / STM32F411 Black Pill Board
+// Chords Firmware for STM32G4 Core Board
 // Use with Chords applications:
 // Chords-Web: chords.upsidedownlabs.tech
 // Chords-Python: github.com/upsidedownlabs/chords-python
@@ -26,28 +26,28 @@
 
 #include <Arduino.h>
 
-// Macros Definitions
-#define NUM_CHANNELS 8                                    // Number of channels supported
-#define HEADER_LEN 3                                      // Header: SYNC_BYTE_1 + SYNC_BYTE_2 + Counter
-#define PACKET_LEN (HEADER_LEN + (NUM_CHANNELS * 2) + 1)  // Packet length = Header + Data + END_BYTE
-#define SAMP_RATE 500.0                                   // Sampling rate
-#define SYNC_BYTE_1 0xC7                                  // Packet first sync byte
-#define SYNC_BYTE_2 0x7C                                  // Packet second sync byte
-#define END_BYTE 0x01                                     // Packet last check byte
-#define BAUD_RATE 230400                                  // Serial connection baud rate
+// Definitions
+#define NUM_CHANNELS 16                                 // Number of channels supported
+#define HEADER_LEN 3                                    // Header: SYNC_BYTE_1 + SYNC_BYTE_2 + Counter
+#define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN + 1)  // Packet length = Header + Data + END_BYTE
+#define SAMP_RATE 500.0                                 // Sampling rate (250 for UNO R3)
+#define SYNC_BYTE_1 0xC7                                // Packet first byte
+#define SYNC_BYTE_2 0x7C                                // Packet second byte
+#define END_BYTE 0x01                                   // Packet last byte
+#define BAUD_RATE 230400                                // Serial connection baud rate
 
 // Hardware Timer for ADC sampling
 HardwareTimer *timer = new HardwareTimer(TIM3);
 
-// Define ADC channels (PA0 to PA7, PB0, PB1)
-const int adcPins[] = { PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7 };
+// Define ADC channels (PA0 to PA7, PB0 to PB2, PB11 to PB15)
+const int adcPins[] = { PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7, PB0, PB1, PB2, PB11, PB12, PB13, PB14, PB15 };
 
 // Global constants and variables
 uint8_t packetBuffer[PACKET_LEN];  // The transmission packet
 uint8_t currentChannel;            // Current channel being sampled
 uint16_t adcValue = 0;             // ADC current value
-bool timerStatus = false;          // Timer satus flag
-bool bufferReady = false;          // Buffer ready flag
+bool timerStatus = false;          // SATUS bit
+bool bufferReady = false;          // Buffer ready status bit
 
 void timerStart() {
   timerStatus = true;
@@ -69,6 +69,8 @@ void timerCallback() {
   // Set buffer ready flag
   bufferReady = true;
 }
+
+
 
 void setup() {
   // Initialize the serial communication
@@ -108,9 +110,7 @@ void loop() {
 
     // Increment the packet counter
     packetBuffer[2]++;
-    // Transmit the packet
     Serial.write(packetBuffer, PACKET_LEN);
-    // Reset the buffer ready flag
     bufferReady = false;
   }
 
@@ -122,7 +122,7 @@ void loop() {
 
     if (command == "WHORU")  // Who are you?
     {
-      Serial.println("STM32F4-BLACK-PILL");
+      Serial.println("STM32G4-CORE-BOARD");
     } else if (command == "START")  // Start data acquisition
     {
       timerStart();
