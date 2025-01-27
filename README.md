@@ -28,6 +28,7 @@ boards into bio-potential data acquisition devices when paired with BioAmp hardw
 | Arduino UNO R4 Minima/WiFi | 5V | 6 | 14-bit | 500 | 230400 | [UNO-R4.ino](UNO-R4/UNO-R4.ino) |
 | Arduino NANO Classic | 5V | 8 | 10-bit | 500 | 230400 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
 | Arduino UNO R3 | 5V | 6 | 10-bit | 500 | 230400 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
+| Arduino Genuino UNO | 5V | 6 | 10-bit | 500 | 230400 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
 | Arduino MEGA 2560 R3 | 5V | 16 | 10-bit | 500 | 230400 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
 | Nano Clone (CH340) | 5V | 8 |  10-bit | 250 | 115200 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
 | UNO R3 Clone (CH340) | 5V | 6 | 10-bit | 250 | 115200 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |

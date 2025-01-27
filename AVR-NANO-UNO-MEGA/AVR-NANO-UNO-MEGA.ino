@@ -30,6 +30,7 @@
 // #define BOARD_NANO_CLONE
 // #define BOARD_NANO_CLASSIC
 // #define BOARD_UNO_R3
+// #define BOARD_GENUINO_UNO
 // #define BOARD_UNO_CLONE
 // #define BOARD_MEGA_2560_R3
 #define BOARD_MEGA_2560_CLONE
@@ -37,6 +38,11 @@
 // Board specific macros
 #if defined(BOARD_UNO_R3)
 #define BOARD_NAME "UNO-R3"
+#define NUM_CHANNELS 6
+#define SAMP_RATE 500
+#define BAUD_RATE 230400
+#elif defined(BOARD_GENUINO_UNO)
+#define BOARD_NAME "GENUINO-UNO"
 #define NUM_CHANNELS 6
 #define SAMP_RATE 500
 #define BAUD_RATE 230400
