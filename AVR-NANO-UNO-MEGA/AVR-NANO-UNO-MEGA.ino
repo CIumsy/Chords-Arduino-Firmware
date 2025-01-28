@@ -32,50 +32,39 @@
 // #define BOARD_UNO_R3
 // #define BOARD_GENUINO_UNO
 // #define BOARD_UNO_CLONE
-// #define BOARD_MEGA_2560_R3
-#define BOARD_MEGA_2560_CLONE
+#define BOARD_MEGA_2560_R3
+// #define BOARD_MEGA_2560_CLONE
 
 // Board specific macros
+// Do not edit anything!
 #if defined(BOARD_UNO_R3)
 #define BOARD_NAME "UNO-R3"
 #define NUM_CHANNELS 6
-#define SAMP_RATE 500
-#define BAUD_RATE 230400
 #elif defined(BOARD_GENUINO_UNO)
 #define BOARD_NAME "GENUINO-UNO"
 #define NUM_CHANNELS 6
-#define SAMP_RATE 500
-#define BAUD_RATE 230400
 #elif defined(BOARD_UNO_CLONE)
 #define BOARD_NAME "UNO-CLONE"
 #define NUM_CHANNELS 6
-#define SAMP_RATE 250
-#define BAUD_RATE 115200
 #elif defined(BOARD_NANO_CLASSIC)
 #define BOARD_NAME "NANO-CLASSIC"
 #define NUM_CHANNELS 8
-#define SAMP_RATE 500
-#define BAUD_RATE 230400
 #elif defined(BOARD_NANO_CLONE)
 #define BOARD_NAME "NANO-CLONE"
 #define NUM_CHANNELS 8
-#define SAMP_RATE 250
-#define BAUD_RATE 115200
 #elif defined(BOARD_MEGA_2560_R3)
 #define BOARD_NAME "MEGA-2560-R3"
 #define NUM_CHANNELS 16
-#define SAMP_RATE 500
-#define BAUD_RATE 230400
 #elif defined(BOARD_MEGA_2560_CLONE)
 #define BOARD_NAME "MEGA-2560-CLONE"
 #define NUM_CHANNELS 16
-#define SAMP_RATE 250
-#define BAUD_RATE 115200
 #else
 #error "Board type not defined. Please define a valid BOARD_NAME macro."
 #endif
 
 // Common macros
+#define SAMP_RATE 250
+#define BAUD_RATE 115200
 #define HEADER_LEN 3                                    // Header = SYNC_BYTE_1 + SYNC_BYTE_2 + Counter
 #define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN + 1)  // Packet length = Header + Data + END_BYTE
 #define SYNC_BYTE_1 0xC7                                // Packet first byte
