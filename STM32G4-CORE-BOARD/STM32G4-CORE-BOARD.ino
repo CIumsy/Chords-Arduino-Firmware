@@ -30,7 +30,7 @@
 #define NUM_CHANNELS 16                                 // Number of channels supported
 #define HEADER_LEN 3                                    // Header: SYNC_BYTE_1 + SYNC_BYTE_2 + Counter
 #define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN + 1)  // Packet length = Header + Data + END_BYTE
-#define SAMP_RATE 500.0                                 // Sampling rate (250 for UNO R3)
+#define SAMP_RATE 250                                 // Sampling rate (250 for UNO R3)
 #define SYNC_BYTE_1 0xC7                                // Packet first byte
 #define SYNC_BYTE_2 0x7C                                // Packet second byte
 #define END_BYTE 0x01                                   // Packet last byte
