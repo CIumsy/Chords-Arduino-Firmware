@@ -21,6 +21,7 @@ boards into bio-potential data acquisition devices when paired with BioAmp hardw
 
 | Board | Voltage | Channels | Resolution | SamplingRate | BaudRate | Code |
 | ----- | ------- | -------- | ---------- | ------------ | -------- | ---- |
+| Neuro Play Ground (NPG) Lite | 2V5 | 3 | 12-bit | 500 | 230400 | [NPG-LITE.ino](NPG-LITE/NPG-LITE.ino) |
 | STM32G4 Core Board | 3V3 | 16 | 12-bit | 500 | 230400 | [STM32G4-CORE-BOARD.ino](STM32G4-CORE-BOARD/STM32G4-CORE-BOARD.ino) |
 | STM32F4 Black Pill | 3V3 | 8 | 12-bit | 500 | 230400 | [STM32F4-BLACK-PILL.ino](STM32F4-BLACK-PILL/STM32F4-BLACK-PILL.ino) |
 | Arduino GIGA R1 (WiFi) | 3V3 | 6 | 16-bit | 500 | 230400 | [GIGA-R1.ino](GIGA-R1/GIGA-R1.ino) |
@@ -30,6 +31,6 @@ boards into bio-potential data acquisition devices when paired with BioAmp hardw
 | Arduino UNO R3 | 5V | 6 | 10-bit | 250 | 115200 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
 | Arduino Genuino UNO | 5V | 6 | 10-bit | 250 | 115200 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
 | Arduino MEGA 2560 R3 | 5V | 16 | 10-bit | 250 | 115200 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
-| Nano Clone (CH340) | 5V | 8 |  10-bit | 250 | 115200 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
-| UNO R3 Clone (CH340) | 5V | 6 | 10-bit | 250 | 115200 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
+| Maker Nano / Nano Clone (CH340) | 5V | 8 |  10-bit | 250 | 115200 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
+| Maker UNO / UNO R3 Clone (CH340) | 5V | 6 | 10-bit | 250 | 115200 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
 | MEGA 2560 Clone (CH340) | 5V | 16 | 10-bit | 250 | 115200 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
