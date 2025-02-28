@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
-// Copyright (c) 2024 Upside Down Labs - contact@upsidedownlabs.tech
+// Copyright (c) 2024 - 2025 Upside Down Labs - contact@upsidedownlabs.tech
 // Author: Deepak Khatri
 //
 // At Upside Down Labs, we create open-source DIY neuroscience hardware and software.
@@ -20,7 +20,6 @@
 // Thank you for being part of this journey with us!
 
 #include <Arduino.h>
-
 
 /** 
 ** Select your board from list below
@@ -32,7 +31,7 @@
 // #define BOARD_UNO_R3
 // #define BOARD_GENUINO_UNO
 // #define BOARD_UNO_CLONE
-#define BOARD_MEGA_2560_R3
+// #define BOARD_MEGA_2560_R3
 // #define BOARD_MEGA_2560_CLONE
 
 // Board specific macros
@@ -59,7 +58,7 @@
 #define BOARD_NAME "MEGA-2560-CLONE"
 #define NUM_CHANNELS 16
 #else
-#error "Board type not defined. Please define a valid BOARD_NAME macro."
+#error "Board type not selected, please uncomment your BOARD macro!"
 #endif
 
 // Common macros

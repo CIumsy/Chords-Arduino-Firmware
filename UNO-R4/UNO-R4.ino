@@ -11,7 +11,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 //
-// Copyright (c) 2024 Upside Down Labs - contact@upsidedownlabs.tech
+// Copyright (c) 2024 - 2025 Upside Down Labs - contact@upsidedownlabs.tech
 // Author: Deepak Khatri
 //
 // At Upside Down Labs, we create open-source DIY neuroscience hardware and software.
