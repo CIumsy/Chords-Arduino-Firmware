@@ -12,8 +12,12 @@
    You should have received a copy of the GNU General Public License
    along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+   BLE connectivity adapted from the ESP32 BLE Server example by Random Nerd Tutorials:
+   https://randomnerdtutorials.com/esp32-bluetooth-low-energy-ble-arduino-ide/.
+
+   Copyright (c) 2024 - 2025 Krishnanshu Mittal - karan4g79@gmail.com
+   Copyright (c) 2024 - 2025 Deepak Khatri - deepak@upsidedownlabs.tech
    Copyright (c) 2024 - 2025 Upside Down Labs - contact@upsidedownlabs.tech
-   Author: Deepak Khatri
 
    At Upside Down Labs, we create open‐source DIY neuroscience hardware and software.
    Our mission is to make neuroscience affordable and accessible for everyone.
@@ -27,8 +31,8 @@
 #include <Arduino.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
-#include <BLEUtils.h>
 #include <BLE2902.h>
+#include <BLEUtils.h>
 #include <Adafruit_NeoPixel.h>
 #include "esp_timer.h"
 
@@ -37,12 +41,10 @@
 #define PIXEL_PIN 3                                       // Neopixel LED pin
 #define PIXEL_BRIGHTNESS 7                                // Brightness of Neopixel LED
 #define NUM_CHANNELS 3                                    // Number of ADC channels
-#define SINGLE_SAMPLE_LEN 10                              // Each sample: 2 sync bytes + 1 counter + (3 channels * 2 bytes) + 1 end byte
+#define SINGLE_SAMPLE_LEN 8                               // Each sample: 1 counter + (3 channels * 2 bytes) + 1 end byte
 #define BLOCK_COUNT 10                                    // Batch size: 10 samples per notification
-#define NEW_PACKET_LEN (BLOCK_COUNT * SINGLE_SAMPLE_LEN)  // New packet length (100 bytes)
+#define NEW_PACKET_LEN (BLOCK_COUNT * SINGLE_SAMPLE_LEN)  // New packet length (80 bytes)
 #define SAMP_RATE 500.0                                   // Sampling rate (500 Hz)
-#define SYNC_BYTE_1 0xC7                                  // First sync byte
-#define SYNC_BYTE_2 0x7C                                  // Second sync byte
 #define END_BYTE 0x01                                     // End byte
 
 // Onboard neopixel at PIXEL_PIN
@@ -97,14 +99,14 @@ class ControlCallback : public BLECharacteristicCallbacks {
       sampleIndex = 0;
       streaming = true;
       digitalWrite(LED_BUILTIN, HIGH);
-      // Optionally, update Neopixel LED to indicate streaming is active (e.g., green)
+      // Optionally, update Neopixel LED to indicate streaming is active (e.g., white)
       // pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, PIXEL_BRIGHTNESS, PIXEL_BRIGHTNESS));
       // pixels.show();
       // Serial.println("Received START command");
     } else if (cmd == "STOP") {
       streaming = false;
       digitalWrite(LED_BUILTIN, LOW);
-      // Optionally, update Neopixel LED to indicate streaming stopped (e.g., turn off or red)
+      // Optionally, update Neopixel LED to indicate streaming stopped (e.g., blue)
       // pixels.setPixelColor(0, pixels.Color(0, 0, PIXEL_BRIGHTNESS));
       // pixels.show();
       // Serial.println("Received STOP command");
@@ -136,7 +138,7 @@ void setup() {
 
   // ----- Initialize Neopixel LED -----
   pixels.begin();
-  // Set the Neopixel to green (indicating device turned on)
+  // Set the Neopixel to red (indicating device turned on)
   pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));
   pixels.show();
 
@@ -189,18 +191,16 @@ void setup() {
 void loop() {
   // When streaming is enabled and the timer flag is set...
   if (streaming && bufferReady) {
-    // Create one sample packet (10 bytes)
+    // Create one sample packet (8 bytes)
     memset(samplePacket, 0, SINGLE_SAMPLE_LEN); // Clear buffer before use
-    samplePacket[0] = SYNC_BYTE_1;
-    samplePacket[1] = SYNC_BYTE_2;
-    samplePacket[2] = overallCounter;
+    samplePacket[0] = overallCounter;
     overallCounter = (overallCounter + 1) % 256;
     
     // Read each ADC channel (channels 0, 1, 2) and store as two bytes (big-endian)
     for (uint8_t ch = 0; ch < NUM_CHANNELS; ch++) {
       uint16_t adcVal = analogRead(ch);
-      samplePacket[3 + ch*2] = highByte(adcVal);
-      samplePacket[3 + ch*2 + 1] = lowByte(adcVal);
+      samplePacket[1 + ch*2] = highByte(adcVal);
+      samplePacket[1 + ch*2 + 1] = lowByte(adcVal);
     }
     samplePacket[SINGLE_SAMPLE_LEN - 1] = END_BYTE;
     
