@@ -41,11 +41,10 @@
 #define PIXEL_PIN 3                                       // Neopixel LED pin
 #define PIXEL_BRIGHTNESS 7                                // Brightness of Neopixel LED
 #define NUM_CHANNELS 3                                    // Number of ADC channels
-#define SINGLE_SAMPLE_LEN 8                               // Each sample: 1 counter + (3 channels * 2 bytes) + 1 end byte
+#define SINGLE_SAMPLE_LEN 7                               // Each sample: 1 counter + (3 channels * 2 bytes)
 #define BLOCK_COUNT 10                                    // Batch size: 10 samples per notification
-#define NEW_PACKET_LEN (BLOCK_COUNT * SINGLE_SAMPLE_LEN)  // New packet length (80 bytes)
+#define NEW_PACKET_LEN (BLOCK_COUNT * SINGLE_SAMPLE_LEN)  // New packet length (70 bytes)
 #define SAMP_RATE 500.0                                   // Sampling rate (500 Hz)
-#define END_BYTE 0x01                                     // End byte
 
 // Onboard neopixel at PIXEL_PIN
 Adafruit_NeoPixel pixels(4, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
@@ -191,7 +190,7 @@ void setup() {
 void loop() {
   // When streaming is enabled and the timer flag is set...
   if (streaming && bufferReady) {
-    // Create one sample packet (8 bytes)
+    // Create one sample packet (7 bytes)
     memset(samplePacket, 0, SINGLE_SAMPLE_LEN); // Clear buffer before use
     samplePacket[0] = overallCounter;
     overallCounter = (overallCounter + 1) % 256;
@@ -202,7 +201,6 @@ void loop() {
       samplePacket[1 + ch*2] = highByte(adcVal);
       samplePacket[1 + ch*2 + 1] = lowByte(adcVal);
     }
-    samplePacket[SINGLE_SAMPLE_LEN - 1] = END_BYTE;
     
     // Append this samplePacket to the batch buffer
     memcpy(&batchBuffer[sampleIndex * SINGLE_SAMPLE_LEN], samplePacket, SINGLE_SAMPLE_LEN);
