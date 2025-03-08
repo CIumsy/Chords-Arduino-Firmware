@@ -42,9 +42,8 @@ bool bufferReady = false;          // Buffer ready status bit
 
 hw_timer_t *timer_1 = NULL;
 
-void IRAM_ATTR ADC_ISR()
-{
-    if (!timerStatus or Serial.available()) {
+void IRAM_ATTR ADC_ISR() {
+  if (!timerStatus or Serial.available()) {
     timerStop();
     return;
   }
