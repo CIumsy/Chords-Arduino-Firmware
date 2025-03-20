@@ -149,7 +149,15 @@ void setup() {
   analogReadResolution(12);
 
   // ----- Initialize BLE -----
-  BLEDevice::init("ESP32_BLE_Device");
+  BLEDevice::init("NPG"); 
+
+  // Retrieve the BLE MAC address
+  String bleMAC = BLEDevice::getAddress().toString().c_str();
+
+  // Set device name
+  String deviceName = "NPG-" + bleMAC;
+  esp_ble_gap_set_device_name(deviceName.c_str());
+
   // Optionally, request a larger MTU:
   BLEDevice::setMTU(111);
 
