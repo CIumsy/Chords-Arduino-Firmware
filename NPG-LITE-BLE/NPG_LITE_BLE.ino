@@ -152,7 +152,7 @@ void setup() {
   BLEDevice::init("NPG"); 
 
   // Retrieve the BLE MAC address
-  String bleMAC = BLEDevice::getAddress().toString().c_str();
+  String bleMAC = BLEDevice::getAddress().toString();
 
   // Set device name
   String deviceName = "NPG-" + bleMAC;
