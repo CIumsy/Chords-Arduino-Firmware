@@ -25,8 +25,6 @@
    Thank you for being part of this journey with us!
 */
 
-
-
 // ----- Existing Includes -----
 #include <Arduino.h>
 #include <BLEDevice.h>
@@ -35,10 +33,23 @@
 #include <BLEUtils.h>
 #include <Adafruit_NeoPixel.h>
 #include "esp_timer.h"
+#include <sdkconfig.h>
 
-// ----- Definitions -----
-#define LED_BUILTIN 6                                     // Status LED pin (used in addition to Neopixel)
-#define PIXEL_PIN 3                                       // Neopixel LED pin
+// ----- Chip-specific Pin Definitions -----
+//
+// Use the ESP-IDF config macros to detect the chip.
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+  #define LED_BUILTIN 7
+  #define PIXEL_PIN   15
+  #define PIXEL_COUNT 6
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+  #define LED_BUILTIN 6
+  #define PIXEL_PIN   3
+  #define PIXEL_COUNT 4
+#else
+  #error "Unsupported board: Please target either ESP32-C6 or ESP32-C3 in your Board Manager."
+#endif
+
 #define PIXEL_BRIGHTNESS 7                                // Brightness of Neopixel LED
 #define NUM_CHANNELS 3                                    // Number of ADC channels
 #define SINGLE_SAMPLE_LEN 7                               // Each sample: 1 counter + (3 channels * 2 bytes)
@@ -46,8 +57,8 @@
 #define NEW_PACKET_LEN (BLOCK_COUNT * SINGLE_SAMPLE_LEN)  // New packet length (70 bytes)
 #define SAMP_RATE 500.0                                   // Sampling rate (500 Hz)
 
-// Onboard neopixel at PIXEL_PIN
-Adafruit_NeoPixel pixels(4, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
+// Onboard Neopixel at PIXEL_PIN
+Adafruit_NeoPixel pixels(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 // BLE UUIDs – change if desired.
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -71,13 +82,22 @@ uint8_t overallCounter = 0;
 // ----- BLE Server Callbacks -----
 class MyServerCallbacks: public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) override {
-    pixels.setPixelColor(0, pixels.Color(0, 0, PIXEL_BRIGHTNESS));
+    pixels.setPixelColor(0, pixels.Color(0, PIXEL_BRIGHTNESS, 0));
     pixels.show();
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(400);
+    digitalWrite(LED_BUILTIN, LOW);
     // Serial.println("BLE client connected");
   }
   void onDisconnect(BLEServer* pServer) override {
     pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));
     pixels.show();
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(400);
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(200);
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(400);
     digitalWrite(LED_BUILTIN, LOW);
     // Serial.println("BLE client disconnected");
     streaming = false;
@@ -93,21 +113,17 @@ class ControlCallback : public BLECharacteristicCallbacks {
     cmd.trim();
     cmd.toUpperCase();
     if (cmd == "START") {
+      pixels.setPixelColor(0, pixels.Color(0, 0, PIXEL_BRIGHTNESS));
+      pixels.show();
       // Reset counters and start streaming
       overallCounter = 0;
       sampleIndex = 0;
       streaming = true;
-      digitalWrite(LED_BUILTIN, HIGH);
-      // Optionally, update Neopixel LED to indicate streaming is active (e.g., white)
-      // pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, PIXEL_BRIGHTNESS, PIXEL_BRIGHTNESS));
-      // pixels.show();
       // Serial.println("Received START command");
     } else if (cmd == "STOP") {
+      pixels.setPixelColor(0, pixels.Color(0, PIXEL_BRIGHTNESS, 0));
+      pixels.show();
       streaming = false;
-      digitalWrite(LED_BUILTIN, LOW);
-      // Optionally, update Neopixel LED to indicate streaming stopped (e.g., blue)
-      // pixels.setPixelColor(0, pixels.Color(0, 0, PIXEL_BRIGHTNESS));
-      // pixels.show();
       // Serial.println("Received STOP command");
     } else if (cmd == "WHORU") {
       characteristic->setValue("NPG-LITE");
