@@ -39,6 +39,12 @@
 //
 // Use the ESP-IDF config macros to detect the chip.
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
+  // ----- Chip Version Detection -----
+  #if CONFIG_ESP32C6_REV_MIN >= 1
+    #define ESP32C6_REV_0_2  // v0.2 or later
+  #else
+    #define ESP32C6_REV_0_1  // v0.1
+  #endif
   #define LED_BUILTIN 7
   #define PIXEL_PIN   15
   #define PIXEL_COUNT 6
@@ -221,7 +227,16 @@ void loop() {
     
     // Read each ADC channel (channels 0, 1, 2) and store as two bytes (big-endian)
     for (uint8_t ch = 0; ch < NUM_CHANNELS; ch++) {
-      uint16_t adcVal = analogRead(ch);
+      uint16_t adcVal;
+      
+      #if defined(ESP32C6_REV_0_1)
+        // Version 0.1 requires scaling
+        adcVal = map(analogRead(ch), 0, 3249, 0, 4095);  // Scale to 12-bit range
+      #else
+        // Version 0.2 or other chips can use direct reading
+        adcVal = analogRead(ch);
+      #endif
+
       samplePacket[1 + ch*2] = highByte(adcVal);
       samplePacket[1 + ch*2 + 1] = lowByte(adcVal);
     }
