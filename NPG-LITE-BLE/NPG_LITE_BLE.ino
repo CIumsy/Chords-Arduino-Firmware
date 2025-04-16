@@ -34,17 +34,14 @@
 #include <Adafruit_NeoPixel.h>
 #include "esp_timer.h"
 #include <sdkconfig.h>
+#include "hal/efuse_hal.h"
 
 // ----- Chip-specific Pin Definitions -----
 //
 // Use the ESP-IDF config macros to detect the chip.
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
-  // ----- Chip Version Detection -----
-  #if CONFIG_ESP32C6_REV_MIN >= 1
-    #define ESP32C6_REV_0_2  // v0.2 or later
-  #else
-    #define ESP32C6_REV_0_1  // v0.1
-  #endif
+  // Store chip revision number
+  uint32_t chiprev = efuse_hal_chip_revision();
   #define LED_BUILTIN 7
   #define PIXEL_PIN   15
   #define PIXEL_COUNT 6
@@ -156,7 +153,6 @@ void IRAM_ATTR adcTimerCallback(void* arg) {
 }
 
 void setup() {
-
   // ----- Initialize Neopixel LED -----
   pixels.begin();
   // Set the Neopixel to red (indicating device turned on)
@@ -229,9 +225,11 @@ void loop() {
     for (uint8_t ch = 0; ch < NUM_CHANNELS; ch++) {
       uint16_t adcVal;
       
-      #if defined(ESP32C6_REV_0_1)
-        // Version 0.1 requires scaling
+      #if defined(CONFIG_IDF_TARGET_ESP32C6)
+      if(chiprev==1)
         adcVal = map(analogRead(ch), 0, 3249, 0, 4095);  // Scale to 12-bit range
+      else
+        adcVal = analogRead(ch);
       #else
         // Version 0.2 or other chips can use direct reading
         adcVal = analogRead(ch);
