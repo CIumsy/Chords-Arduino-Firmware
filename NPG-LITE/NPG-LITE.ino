@@ -20,9 +20,29 @@
 // Thank you for being part of this journey with us!
 
 #include <Arduino.h>
+#include <sdkconfig.h>
+#include "hal/efuse_hal.h"
+#include <Adafruit_NeoPixel.h>
+
+// ----- Chip-specific Pin Definitions -----
+//
+// Use the ESP-IDF config macros to detect the chip.
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+  // Store chip revision number
+  uint32_t chiprev = efuse_hal_chip_revision();
+  #define LED_BUILTIN 7
+  #define PIXEL_PIN   15
+  #define PIXEL_COUNT 6
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+  #define LED_BUILTIN 6
+  #define PIXEL_PIN   3
+  #define PIXEL_COUNT 4
+#else
+  #error "Unsupported board: Please target either ESP32-C6 or ESP32-C3 in your Board Manager."
+#endif
 
 // Definitions
-#define LED_BUILTIN 6
+#define PIXEL_BRIGHTNESS 7                              // Brightness of Neopixel LED
 #define TIMER_FREQ 1000000
 #define NUM_CHANNELS 3                                  // Number of channels supported
 #define HEADER_LEN 3                                    // Header = SYNC_BYTE_1 + SYNC_BYTE_2 + Counter
@@ -33,10 +53,13 @@
 #define END_BYTE 0x01                                   // Packet last byte
 #define BAUD_RATE 230400                                // Serial connection baud rate
 
+// Onboard Neopixel at PIXEL_PIN
+Adafruit_NeoPixel pixels(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
+
 // Global constants and variables
 uint8_t packetBuffer[PACKET_LEN];  // The transmission packet
 uint8_t currentChannel;            // Current channel being sampled
-uint16_t adcValue = 0;             // ADC current value
+uint16_t adcVal = 0;             // ADC current value
 bool timerStatus = false;          // Timer status bit
 bool bufferReady = false;          // Buffer ready status bit
 
@@ -56,20 +79,34 @@ void IRAM_ATTR ADC_ISR()
 void timerStart() {
   timerStatus = true;
   timerStart(timer_1);
-  digitalWrite(LED_BUILTIN, HIGH);
+  pixels.setPixelColor(0, pixels.Color(0, 0, PIXEL_BRIGHTNESS));
+    pixels.show();
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(400);
+    digitalWrite(LED_BUILTIN, LOW);
 }
 
 void timerStop() {
   timerStatus = false;
   bufferReady = false;
   timerStop(timer_1);
-  digitalWrite(LED_BUILTIN, LOW);
+  pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));
+    pixels.show();
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(400);
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(200);
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(400);
+    digitalWrite(LED_BUILTIN, LOW);
 }
 
 void setup() {
 
   Serial.begin(BAUD_RATE);
   Serial.setTimeout(100);
+  pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));
+    pixels.show();
   while (!Serial) {
     ;  // Wait for serial port to connect. Needed for native USB
   }
@@ -99,11 +136,19 @@ void loop() {
     for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++) {
 
       // Read ADC input
-      adcValue = analogRead(currentChannel);
+      #if defined(CONFIG_IDF_TARGET_ESP32C6)
+      if(chiprev==1)
+        adcVal = map(analogRead(currentChannel), 0, 3249, 0, 4095);  // Scale to 12-bit range
+      else
+        adcVal = analogRead(currentChannel);
+      #else
+        // Version 0.2 or other chips can use direct reading
+        adcVal = analogRead(currentChannel);
+      #endif
 
       // Store current values in packetBuffer to send.
-      packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(adcValue);     // Write High Byte
-      packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(adcValue);  // Write Low Byte
+      packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(adcVal);     // Write High Byte
+      packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(adcVal);  // Write Low Byte
     }
 
     // Increment the packet counter
