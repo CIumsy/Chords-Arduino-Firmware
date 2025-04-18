@@ -28,46 +28,47 @@
 //
 // Use the ESP-IDF config macros to detect the chip.
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
-  // Store chip revision number
-  uint32_t chiprev = efuse_hal_chip_revision();
-  #define LED_BUILTIN 7
-  #define PIXEL_PIN   15
-  #define PIXEL_COUNT 6
+// Store chip revision number
+uint32_t chiprev = efuse_hal_chip_revision();
+#define LED_BUILTIN 7
+#define PIXEL_PIN 15
+#define PIXEL_COUNT 6
 #elif defined(CONFIG_IDF_TARGET_ESP32C3)
-  #define LED_BUILTIN 6
-  #define PIXEL_PIN   3
-  #define PIXEL_COUNT 4
+#define LED_BUILTIN 6
+#define PIXEL_PIN 3
+#define PIXEL_COUNT 4
 #else
-  #error "Unsupported board: Please target either ESP32-C6 or ESP32-C3 in your Board Manager."
+#error "Unsupported board: Please target either ESP32-C6 or ESP32-C3 in your Board Manager."
 #endif
 
 // Definitions
-#define PIXEL_BRIGHTNESS 7                              // Brightness of Neopixel LED
+#define PIXEL_BRIGHTNESS 7 // Brightness of Neopixel LED
 #define TIMER_FREQ 1000000
-#define NUM_CHANNELS 3                                  // Number of channels supported
-#define HEADER_LEN 3                                    // Header = SYNC_BYTE_1 + SYNC_BYTE_2 + Counter
-#define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN + 1)  // Packet length = Header + Data + END_BYTE
-#define SAMP_RATE 500.0                                 // Sampling rate (250/500 for UNO R4)
-#define SYNC_BYTE_1 0xC7                                // Packet first byte
-#define SYNC_BYTE_2 0x7C                                // Packet second byte
-#define END_BYTE 0x01                                   // Packet last byte
-#define BAUD_RATE 230400                                // Serial connection baud rate
+#define NUM_CHANNELS 3                                 // Number of channels supported
+#define HEADER_LEN 3                                   // Header = SYNC_BYTE_1 + SYNC_BYTE_2 + Counter
+#define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN + 1) // Packet length = Header + Data + END_BYTE
+#define SAMP_RATE 500.0                                // Sampling rate (250/500 for UNO R4)
+#define SYNC_BYTE_1 0xC7                               // Packet first byte
+#define SYNC_BYTE_2 0x7C                               // Packet second byte
+#define END_BYTE 0x01                                  // Packet last byte
+#define BAUD_RATE 230400                               // Serial connection baud rate
 
 // Onboard Neopixel at PIXEL_PIN
 Adafruit_NeoPixel pixels(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 // Global constants and variables
-uint8_t packetBuffer[PACKET_LEN];  // The transmission packet
-uint8_t currentChannel;            // Current channel being sampled
-uint16_t adcVal = 0;             // ADC current value
-bool timerStatus = false;          // Timer status bit
-bool bufferReady = false;          // Buffer ready status bit
+uint8_t packetBuffer[PACKET_LEN]; // The transmission packet
+uint8_t currentChannel;           // Current channel being sampled
+uint16_t adcValue = 0;            // ADC current value
+bool timerStatus = false;         // Timer status bit
+bool bufferReady = false;         // Buffer ready status bit
 
 hw_timer_t *timer_1 = NULL;
 
 void IRAM_ATTR ADC_ISR()
 {
-    if (!timerStatus or Serial.available()) {
+  if (!timerStatus or Serial.available())
+  {
     timerStop();
     return;
   }
@@ -76,39 +77,44 @@ void IRAM_ATTR ADC_ISR()
   bufferReady = true;
 }
 
-void timerStart() {
+void timerStart()
+{
   timerStatus = true;
   timerStart(timer_1);
-  pixels.setPixelColor(0, pixels.Color(0, 0, PIXEL_BRIGHTNESS));
-    pixels.show();
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(400);
-    digitalWrite(LED_BUILTIN, LOW);
+  pixels.setPixelColor(0, pixels.Color(0, 0, PIXEL_BRIGHTNESS)); // Blue
+  pixels.show();
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(400);
+  digitalWrite(LED_BUILTIN, LOW);
 }
 
-void timerStop() {
+void timerStop()
+{
   timerStatus = false;
   bufferReady = false;
   timerStop(timer_1);
-  pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));
-    pixels.show();
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(400);
-    digitalWrite(LED_BUILTIN, LOW);
-    delay(200);
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(400);
-    digitalWrite(LED_BUILTIN, LOW);
+  pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0)); // Red
+  pixels.show();
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(400);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(200);
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(400);
+  digitalWrite(LED_BUILTIN, LOW);
 }
 
-void setup() {
+void setup()
+{
 
   Serial.begin(BAUD_RATE);
   Serial.setTimeout(100);
+  // Set the Neopixel to red (indicating device turned on)
   pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));
-    pixels.show();
-  while (!Serial) {
-    ;  // Wait for serial port to connect. Needed for native USB
+  pixels.show();
+  while (!Serial)
+  {
+    ; // Wait for serial port to connect. Needed for native USB
   }
 
   // Status LED
@@ -116,10 +122,10 @@ void setup() {
   digitalWrite(LED_BUILTIN, LOW);
 
   // Initialize packetBuffer
-  packetBuffer[0] = SYNC_BYTE_1;            // Sync 0
-  packetBuffer[1] = SYNC_BYTE_2;            // Sync 1
-  packetBuffer[2] = 0;                      // Packet counter
-  packetBuffer[PACKET_LEN - 1] = END_BYTE;  // End Byte
+  packetBuffer[0] = SYNC_BYTE_1;           // Sync 0
+  packetBuffer[1] = SYNC_BYTE_2;           // Sync 1
+  packetBuffer[2] = 0;                     // Packet counter
+  packetBuffer[PACKET_LEN - 1] = END_BYTE; // End Byte
 
   timer_1 = timerBegin(1000000);
   timerAttachInterrupt(timer_1, &ADC_ISR);
@@ -128,27 +134,30 @@ void setup() {
   analogReadResolution(12);
 }
 
-void loop() {
+void loop()
+{
   // Send data if the buffer is ready and the timer is activ
-  if (timerStatus and bufferReady) {
+  if (timerStatus and bufferReady)
+  {
 
     // ADC value Reading, Converting, and Storing:
-    for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++) {
+    for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++)
+    {
 
-      // Read ADC input
-      #if defined(CONFIG_IDF_TARGET_ESP32C6)
-      if(chiprev==1)
-        adcVal = map(analogRead(currentChannel), 0, 3249, 0, 4095);  // Scale to 12-bit range
+// Read ADC input
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+      if (chiprev == 1)
+        adcValue = map(analogRead(currentChannel), 0, 3249, 0, 4095); // Scale to 12-bit range
       else
-        adcVal = analogRead(currentChannel);
-      #else
-        // Version 0.2 or other chips can use direct reading
-        adcVal = analogRead(currentChannel);
-      #endif
+        adcValue = analogRead(currentChannel);
+#else
+      // Version 0.2 or other chips can use direct reading
+      adcValue = analogRead(currentChannel);
+#endif
 
       // Store current values in packetBuffer to send.
-      packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(adcVal);     // Write High Byte
-      packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(adcVal);  // Write Low Byte
+      packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(adcValue);    // Write High Byte
+      packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(adcValue); // Write Low Byte
     }
 
     // Increment the packet counter
@@ -159,24 +168,30 @@ void loop() {
     bufferReady = false;
   }
 
-  if (Serial.available()) {
+  if (Serial.available())
+  {
     String command = Serial.readStringUntil('\n');
-    command.trim();         // Remove extra spaces or newline characters
-    command.toUpperCase();  // Normalize to uppercase for case-insensitivity
+    command.trim();        // Remove extra spaces or newline characters
+    command.toUpperCase(); // Normalize to uppercase for case-insensitivity
 
-    if (command == "WHORU")  // Who are you?
+    if (command == "WHORU") // Who are you?
     {
       Serial.println("NPG-LITE");
-    } else if (command == "START")  // Start data acquisition
+    }
+    else if (command == "START") // Start data acquisition
     {
       timerStart();
-    } else if (command == "STOP")  // Stop data acquisition
+    }
+    else if (command == "STOP") // Stop data acquisition
     {
       timerStop();
-    } else if (command == "STATUS")  // Get status
+    }
+    else if (command == "STATUS") // Get status
     {
       Serial.println(timerStatus ? "RUNNING" : "STOPPED");
-    } else {
+    }
+    else
+    {
       Serial.println("UNKNOWN COMMAND");
     }
   }
