@@ -109,6 +109,7 @@ void setup()
 
   Serial.begin(BAUD_RATE);
   Serial.setTimeout(100);
+  pixels.begin(); //Initialize the NeoPixel library
   // Set the Neopixel to red (indicating device turned on)
   pixels.setPixelColor(PIXEL_COUNT-1, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));
   pixels.show();
