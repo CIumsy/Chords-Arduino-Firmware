@@ -81,7 +81,7 @@ void timerStart()
 {
   timerStatus = true;
   timerStart(timer_1);
-  pixels.setPixelColor(0, pixels.Color(0, 0, PIXEL_BRIGHTNESS)); // Blue
+  pixels.setPixelColor(PIXEL_COUNT-1, pixels.Color(0, 0, PIXEL_BRIGHTNESS)); // Blue
   pixels.show();
   digitalWrite(LED_BUILTIN, HIGH);
   delay(400);
@@ -93,7 +93,7 @@ void timerStop()
   timerStatus = false;
   bufferReady = false;
   timerStop(timer_1);
-  pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0)); // Red
+  pixels.setPixelColor(PIXEL_COUNT-1, pixels.Color(PIXEL_BRIGHTNESS, 0, 0)); // Red
   pixels.show();
   digitalWrite(LED_BUILTIN, HIGH);
   delay(400);
@@ -109,8 +109,9 @@ void setup()
 
   Serial.begin(BAUD_RATE);
   Serial.setTimeout(100);
+  pixels.begin(); //Initialize the NeoPixel library
   // Set the Neopixel to red (indicating device turned on)
-  pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));
+  pixels.setPixelColor(PIXEL_COUNT-1, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));
   pixels.show();
   while (!Serial)
   {
