@@ -40,7 +40,7 @@
 HardwareTimer *timer = new HardwareTimer(TIM3);
 
 // Define ADC channels (PA0 to PA7, PB0 to PB2, PB11 to PB15)
-const int adcPins[] = { PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7, PB0, PB1, PB2, PB11, PB12, PB13, PB14, PB15 };
+const int adcPins[] = { PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7, PB0, PB1, PB2, PB11, PB12, PB14, PB15, PC4 };
 
 // Global constants and variables
 uint8_t packetBuffer[PACKET_LEN];  // The transmission packet
@@ -85,7 +85,7 @@ void setup() {
   }
 
   // Set ADC resolution to 12 bits
-  analogReadResolution(12);
+  // analogReadResolution(12);
 
   // Initialize packetBuffer
   packetBuffer[0] = SYNC_BYTE_1;            // Sync 0
