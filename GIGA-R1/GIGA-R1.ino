@@ -23,17 +23,18 @@
 #include <Arduino_AdvancedAnalog.h>
 
 // Definitions
-#define NUM_CHANNELS 6                              // Number of channels supported
-#define HEADER_LEN 4                                // Header = SYNC_BYTE_1 + SYNC_BYTE_2 + Counter +
-#define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN)  // Packet length = Header + Data + END_BYTE
-#define ADC_SAMPLING 16000                          // ADC sampling rate
-#define ADC_QUEUE 256                               // ADC Qeueue depth
-#define ADC_RES 16                                  // ADC Resolutiton
-#define SAMPLES_CHANNEL 32                          // Samples per channel
-#define SAMP_RATE ADC_SAMPLING / SAMPLES_CHANNEL    // CHORDS Sampling rate (250/500 for GIGA R1 WiFi)
-#define SYNC_BYTE_1 0xC7                            // Packet first byte
-#define SYNC_BYTE_2 0x7C                            // Packet second byte
-#define BAUD_RATE 230400                            // Serial connection baud rate
+#define NUM_CHANNELS 6                                  // Number of channels supported
+#define HEADER_LEN 3                                    // Header = SYNC_BYTE_1 + SYNC_BYTE_2 + Counter +
+#define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN + 1)  // Packet length = Header + Data + END_BYTE
+#define ADC_SAMPLING 16000                              // ADC sampling rate
+#define ADC_QUEUE 256                                   // ADC Qeueue depth
+#define ADC_RES 16                                      // ADC Resolutiton
+#define SAMPLES_CHANNEL 32                              // Samples per channel
+#define SAMP_RATE ADC_SAMPLING / SAMPLES_CHANNEL        // CHORDS Sampling rate (250/500 for GIGA R1 WiFi)
+#define SYNC_BYTE_1 0xC7                                // Packet first byte
+#define SYNC_BYTE_2 0x7C                                // Packet second byte
+#define END_BYTE 0x01                                   // Packet last byte
+#define BAUD_RATE 230400                                // Serial connection baud rate
 
 // Global constants and variables
 uint8_t packetBuffer[PACKET_LEN];  // The transmission packet
@@ -72,11 +73,10 @@ void setup() {
   digitalWrite(LED_BUILTIN, HIGH);
 
   // Initialize packetBuffer
-  packetBuffer[0] = SYNC_BYTE_1;  // Sync 0
-  packetBuffer[1] = SYNC_BYTE_2;  // Sync 1
-  packetBuffer[2] = 0;            // Packet counter
-  packetBuffer[3] = ((NUM_CHANNELS << 4) - 1)
-                    | (ADC_RES - 10);  // Config Byte
+  packetBuffer[0] = SYNC_BYTE_1;            // Sync 0
+  packetBuffer[1] = SYNC_BYTE_2;            // Sync 1
+  packetBuffer[2] = 0;                      // Packet counter
+  packetBuffer[PACKET_LEN - 1] = END_BYTE;  // End Byte
 }
 
 void loop() {
