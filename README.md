@@ -34,4 +34,4 @@ boards into bio-potential data acquisition devices when paired with BioAmp hardw
 | Maker Nano / Nano Clone (CH340) | 5V | 8 |  10-bit | 250 | 115200 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
 | Maker UNO / UNO R3 Clone (CH340) | 5V | 6 | 10-bit | 250 | 115200 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
 | MEGA 2560 Clone (CH340) | 5V | 16 | 10-bit | 250 | 115200 | [AVR-NANO-UNO-MEGA.ino](AVR-NANO-UNO-MEGA/AVR-NANO-UNO-MEGA.ino) |
-| ESP32-S3 | 5V | 16 | 12-bit | 500 | 230400 | [ESP32-S3.ino](ESP32-S3/ESP32-S3.ino) |
+| ESP32-S3 | 3V3 | 16 | 12-bit | 500 | 230400 | [ESP32-S3.ino](ESP32-S3/ESP32-S3.ino) |
