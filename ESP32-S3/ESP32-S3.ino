@@ -46,11 +46,15 @@ bool bufferReady = false;          // Buffer ready status bit
 hw_timer_t *timer_1 = NULL;
 
 void IRAM_ATTR ADC_ISR() {
-  if (!timerStatus or Serial.available()) {
-    timerStop();
-    return;
+  // ADC value Reading, Converting, and Storing:
+  for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++) {
+    adcValue = analogRead(adcPins[currentChannel]);
+    // Store current values in packetBuffer to send.
+    packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(adcValue);     // Write High Byte
+    packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(adcValue);  // Write Low Byte
   }
-
+  // Increment the packet counter
+  packetBuffer[2]++;
   // Set bufferReady status bit to true
   bufferReady = true;
 }
@@ -91,16 +95,7 @@ void loop() {
   // Send data if the buffer is ready and the timer is activ
   if (timerStatus and bufferReady) {
 
-    // ADC value Reading, Converting, and Storing:
-    for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++) {
-      adcValue = analogRead(adcPins[currentChannel]);
-      // Store current values in packetBuffer to send.
-      packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(adcValue);     // Write High Byte
-      packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(adcValue);  // Write Low Byte
-    }
 
-    // Increment the packet counter
-    packetBuffer[2]++;
     // Send the packetBuffer to the Serial port
     Serial.write(packetBuffer, PACKET_LEN);
     // Reset the bufferReady flag
