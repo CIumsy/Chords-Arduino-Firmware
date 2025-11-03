@@ -107,13 +107,9 @@ void setup() {
 }
 
 void loop() {
-  // Send data if the buffer is ready and the timer is activ
-  if (timerStatus and bufferReady) {
-    Serial.write(packetBuffer, PACKET_LEN);
-    bufferReady = false;
-  }
-
+  // Check if something is avaialble on Serial
   if (Serial.available()) {
+    // Read the command
     String command = Serial.readStringUntil('\n');
     command.trim();         // Remove extra spaces or newline characters
     command.toUpperCase();  // Normalize to uppercase for case-insensitivity
@@ -133,5 +129,11 @@ void loop() {
     } else {
       Serial.println("UNKNOWN COMMAND");
     }
+  }
+
+  // Send data if the buffer is ready and the timer is activ
+  if (timerStatus and bufferReady) {
+    Serial.write(packetBuffer, PACKET_LEN);
+    bufferReady = false;
   }
 }
