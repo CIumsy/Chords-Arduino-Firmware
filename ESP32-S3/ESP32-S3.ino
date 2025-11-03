@@ -14,6 +14,7 @@
 // Copyright (c) 2025 Krishnanshu Mittal - krishnanshu@upsidedownlabs.tech
 // Copyright (c) 2025 Deepak Khatri - deepak@upsidedownlabs.tech
 // Copyright (c) 2025 Upside Down Labs - contact@upsidedownlabs.tech
+// Copyright (c) 2025 Mahesh Tupe - tupemahesh@upsidedownlabs.tech
 //
 // At Upside Down Labs, we create open-source DIY neuroscience hardware and software.
 // Our mission is to make neuroscience affordable and accessible for everyone.
@@ -28,7 +29,7 @@
 #define NUM_CHANNELS 16
 #define HEADER_LEN 3
 #define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN + 1)
-#define SAMP_RATE 500.0  // 500 samples/sec
+#define SAMP_RATE 250.0  // 250 samples/sec for 16 channels
 #define SYNC_BYTE_1 0xC7
 #define SYNC_BYTE_2 0x7C
 #define END_BYTE 0x01
