@@ -104,13 +104,22 @@ bool timerStop() {
 
 // ISR for Timer1 Compare A match (called based on the sampling rate)
 ISR(TIMER1_COMPA_vect) {
-  if (!timerStatus or Serial.available()) {
-    timerStop();
-    return;
-  }
+  // ADC value Reading, Converting, and Storing:
+    for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++) {
 
-  // Set bufferReady status bit to true
-  bufferReady = true;
+      // Read ADC input
+      adcValue = analogRead(currentChannel);
+
+      // Store current values in packetBuffer to send.
+      packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(adcValue);     // Write High Byte
+      packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(adcValue);  // Write Low Byte
+    }
+
+    // Increment the packet counter
+    packetBuffer[2]++;
+
+    bufferReady = true;
+
 }
 
 void timerBegin(float sampling_rate) {
@@ -161,27 +170,6 @@ void setup() {
 }
 
 void loop() {
-  // Send data if the buffer is ready and the timer is activ
-  if (timerStatus and bufferReady) {
-
-    // ADC value Reading, Converting, and Storing:
-    for (currentChannel = 0; currentChannel < NUM_CHANNELS; currentChannel++) {
-
-      // Read ADC input
-      adcValue = analogRead(currentChannel);
-
-      // Store current values in packetBuffer to send.
-      packetBuffer[((2 * currentChannel) + HEADER_LEN)] = highByte(adcValue);     // Write High Byte
-      packetBuffer[((2 * currentChannel) + HEADER_LEN + 1)] = lowByte(adcValue);  // Write Low Byte
-    }
-
-    // Increment the packet counter
-    packetBuffer[2]++;
-    // Send the packetBuffer to the Serial port
-    Serial.write(packetBuffer, PACKET_LEN);
-    // Reset the bufferReady flag
-    bufferReady = false;
-  }
 
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n');
@@ -203,5 +191,12 @@ void loop() {
     } else {
       Serial.println("UNKNOWN COMMAND");
     }
+  }
+  // Send data if the buffer is ready and the timer is activ
+  if (timerStatus and bufferReady) {
+    // Send the packetBuffer to the Serial port
+    Serial.write(packetBuffer, PACKET_LEN);
+    // Reset the bufferReady flag
+    bufferReady = false;
   }
 }
