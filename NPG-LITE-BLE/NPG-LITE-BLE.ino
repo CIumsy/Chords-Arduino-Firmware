@@ -314,13 +314,6 @@ void setup() {
   esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_N3);
   esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_SCAN, ESP_PWR_LVL_N3);
 
-
-  // Retrieve the BLE MAC address and set device name
-  // String bleMAC = BLEDevice::getAddress().toString();
-  // String deviceName = "NPG-" + bleMAC;
-  // esp_ble_gap_set_device_name(deviceName.c_str());
-
-
   // Optional larger MTU for efficiency (doesn't change packet format)
   BLEDevice::setMTU(500);
 
