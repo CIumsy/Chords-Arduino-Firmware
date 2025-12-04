@@ -73,7 +73,7 @@ uint32_t chiprev = efuse_hal_chip_revision();
 #define BLOCK_COUNT 10                                    // Batch size: 10 samples per notification
 #define NEW_PACKET_LEN (BLOCK_COUNT * SINGLE_SAMPLE_LEN)  // New packet length (70 bytes)
 #define SAMP_RATE 500.0                                   // Sampling rate per channel (500 Hz)
-#define SOC_ADC_DIGI_RESULT_BYTES 4                       // Number of bytes per ADC conversion result in continuous mode
+#define ADC_CONV_BYTES SOC_ADC_DIGI_RESULT_BYTES          // Number of bytes per ADC conversion result in continuous mode
 #define BATTERY_PIN A6
 
 
@@ -413,8 +413,8 @@ static void adc_dma_init() {
 
   // Create driver handle and configure continuous conversion
   adc_continuous_handle_cfg_t handle_cfg = {
-    .max_store_buf_size = NUM_CHANNELS * SOC_ADC_DIGI_RESULT_BYTES * BLOCK_COUNT * 5,
-    .conv_frame_size = NUM_CHANNELS * SOC_ADC_DIGI_RESULT_BYTES * BLOCK_COUNT,
+    .max_store_buf_size = NUM_CHANNELS * ADC_CONV_BYTES * BLOCK_COUNT * 5,
+    .conv_frame_size = NUM_CHANNELS * ADC_CONV_BYTES * BLOCK_COUNT,
 #if defined(ESP_IDF_VERSION) && (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 0))
     .flags = { .flush_pool = 1 },  // Only for newer IDF that supports it
 #endif
@@ -491,7 +491,7 @@ static inline uint16_t fix_raw_if_needed(uint16_t raw) {
 
 static void handle_adc_dma_and_notify() {
   // Read whatever DMA has buffered; non-blocking with short buffer
-  uint8_t dma_buf[NUM_CHANNELS * SOC_ADC_DIGI_RESULT_BYTES * BLOCK_COUNT];
+  uint8_t dma_buf[NUM_CHANNELS * ADC_CONV_BYTES * BLOCK_COUNT];
   uint32_t ret_len = 0;
   esp_err_t ret = adc_continuous_read(adc_handle, dma_buf, sizeof(dma_buf), &ret_len, 0);
   if (ret != ESP_OK || ret_len == 0) {
@@ -506,7 +506,7 @@ static void handle_adc_dma_and_notify() {
   const uint8_t FULL_MASK = (1u << NUM_CHANNELS) - 1;
 
 
-  for (uint32_t i = 0; i + SOC_ADC_DIGI_RESULT_BYTES <= ret_len; i += SOC_ADC_DIGI_RESULT_BYTES) {
+  for (uint32_t i = 0; i + ADC_CONV_BYTES <= ret_len; i += ADC_CONV_BYTES) {
     auto *p = (const adc_digi_output_data_t *)&dma_buf[i];
     uint8_t ch_hw = ADC_GET_CHANNEL(p);  // physical channel id from TYPE2
     uint16_t raw = ADC_GET_DATA(p);
