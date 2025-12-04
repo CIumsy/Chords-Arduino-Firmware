@@ -130,7 +130,6 @@ float interpolatePercentage(float voltage) {
 
 // ----- Global Variables -----
 uint8_t batchBuffer[NEW_PACKET_LEN] = { 0 };  // Buffer to accumulate BLOCK_COUNT samples
-uint8_t samplePacket[SINGLE_SAMPLE_LEN] = { 0 };
 volatile int sampleIndex = 0;     // How many samples accumulated in current batch
 volatile bool streaming = false;  // True when "START" command is received
 uint8_t mac[6];                   // Array to store 6-byte MAC address
