@@ -396,7 +396,7 @@ void loop() {
   }
 
   if (streaming) {
-    // Battery check only when streaming (every 2 minutes)
+    // Battery check only when streaming (every 10 seconds)
     unsigned long currentMillis = millis();
     if (currentMillis - lastBatteryCheck >= BATTERY_CHECK_INTERVAL) {
       lastBatteryCheck = currentMillis;
