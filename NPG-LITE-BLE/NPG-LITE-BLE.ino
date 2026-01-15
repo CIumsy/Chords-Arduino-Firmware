@@ -15,9 +15,9 @@
    BLE connectivity adapted from the ESP32 BLE Server example by Random Nerd Tutorials:
    https://randomnerdtutorials.com/esp32-bluetooth-low-energy-ble-arduino-ide/.
 
-   Copyright (c) 2024 - 2025 Krishnanshu Mittal - krishnanshu@upsidedownlabs.tech
-   Copyright (c) 2024 - 2025 Deepak Khatri - deepak@upsidedownlabs.tech
-   Copyright (c) 2024 - 2025 Upside Down Labs - contact@upsidedownlabs.tech
+   Copyright (c) 2025 Krishnanshu Mittal - krishnanshu@upsidedownlabs.tech
+   Copyright (c) 2025 Deepak Khatri - deepak@upsidedownlabs.tech
+   Copyright (c) 2025 Upside Down Labs - contact@upsidedownlabs.tech
 
    At Upside Down Labs, we create open‐source DIY neuroscience hardware and software.
    Our mission is to make neuroscience affordable and accessible for everyone.
@@ -83,7 +83,7 @@ Adafruit_NeoPixel pixels(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 // Battery monitoring variables
 static unsigned long lastBatteryCheck = 0;
-static const unsigned long BATTERY_CHECK_INTERVAL = 120000;  // 2 minutes in milliseconds
+static const unsigned long BATTERY_CHECK_INTERVAL = 10000;  // Interval in milliseconds
 static BLEServer *pBLEServer = nullptr;                      // Store server reference for disconnect
 
 
@@ -126,6 +126,7 @@ float interpolatePercentage(float voltage) {
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define DATA_CHAR_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"     // For ADC data (Notify only)
 #define CONTROL_CHAR_UUID "0000ff01-0000-1000-8000-00805f9b34fb"  // For commands (Read/Write/Notify)
+#define BATTERY_CHAR_UUID "f633d0ec-46b4-43c1-a39f-1ca06d0602e1"  // For battery status (Notify only)
 
 
 // ----- Global Variables -----
@@ -141,6 +142,7 @@ static volatile bool adc_stop_requested = false;
 
 BLECharacteristic *pDataCharacteristic;
 BLECharacteristic *pControlCharacteristic;
+BLECharacteristic *pBatteryCharacteristic;
 
 
 // Global sample counter (each sample's packet counter)
@@ -258,6 +260,10 @@ void checkBatteryAndDisconnect() {
   float voltage = (latestBatteryRaw / 1000.0) * 2;  // ESP32C6 v0.1
   voltage = voltage - 0.02;
   float percentage = interpolatePercentage(voltage);
+  // Send battery percentage as single byte (0-100)
+  uint8_t batteryByte = (uint8_t)percentage;
+  pBatteryCharacteristic->setValue(&batteryByte, 1);
+  pBatteryCharacteristic->notify();
   if (percentage < 5.0) {
     // Stop streaming
     streaming = false;
@@ -341,6 +347,12 @@ void setup() {
     CONTROL_CHAR_UUID,
     BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
   pControlCharacteristic->setCallbacks(new ControlCallback());
+
+  // Battery Characteristic (Read/Notify)
+  pBatteryCharacteristic = pService->createCharacteristic(
+    BATTERY_CHAR_UUID,
+    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  pBatteryCharacteristic->addDescriptor(new BLE2902());
 
 
   pService->start();
