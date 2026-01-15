@@ -134,6 +134,10 @@ volatile int sampleIndex = 0;     // How many samples accumulated in current bat
 volatile bool streaming = false;  // True when "START" command is received
 uint8_t mac[6];                   // Array to store 6-byte MAC address
 
+// Flags to start/stop adc_continuous_mode
+static volatile bool adc_start_requested = false;
+static volatile bool adc_stop_requested = false;
+
 
 BLECharacteristic *pDataCharacteristic;
 BLECharacteristic *pControlCharacteristic;
@@ -209,7 +213,7 @@ class MyServerCallbacks : public BLEServerCallbacks {
 
 
     streaming = false;
-    adc_dma_stop();
+    adc_stop_requested = true;  // Request stop
     esp_ble_gap_start_advertising(&advParams);
   }
 };
@@ -230,12 +234,12 @@ class ControlCallback : public BLECharacteristicCallbacks {
       overallCounter = 0;
       sampleIndex = 0;
       streaming = true;
-      adc_dma_start();
+      adc_start_requested = true;  // Request start 
     } else if (cmd == "STOP") {
       pixels.setPixelColor(0, pixels.Color(0, PIXEL_BRIGHTNESS, 0));  // Green
       pixels.show();
       streaming = false;
-      adc_dma_stop();
+      adc_stop_requested = true;  // Request stop 
     } else if (cmd == "WHORU") {
       characteristic->setValue("NPG-LITE");
       characteristic->notify();
@@ -257,7 +261,10 @@ void checkBatteryAndDisconnect() {
   if (percentage < 5.0) {
     // Stop streaming
     streaming = false;
-    adc_dma_stop();
+    adc_stop_requested = true;  // Request stop
+
+    pixels.setPixelColor(1, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red
+    pixels.show();
 
     // Disconnect BLE client if connected
     if (pBLEServer != nullptr && pBLEServer->getConnectedCount() > 0) {
@@ -366,6 +373,16 @@ void setup() {
 
 
 void loop() {
+  // Handle start/stop requests of adc_continuous_mode
+  if (adc_start_requested) {
+    adc_dma_start();
+    adc_start_requested = false;
+  }
+  if (adc_stop_requested) {
+    adc_dma_stop();
+    adc_stop_requested = false;
+  }
+
   if (streaming) {
     // Battery check only when streaming (every 2 minutes)
     unsigned long currentMillis = millis();
