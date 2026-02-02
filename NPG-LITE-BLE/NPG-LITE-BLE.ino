@@ -69,7 +69,7 @@ uint32_t chiprev = efuse_hal_chip_revision();
 
 #define PIXEL_BRIGHTNESS 7                                // Brightness of Neopixel LED
 #define NUM_CHANNELS 4                                    // Number of BioAmp channels + 1 channel for battery
-#define SINGLE_SAMPLE_LEN 7                               // Each sample: 1 counter + (3 bioAmp channels * 2 bytes)
+#define SINGLE_SAMPLE_LEN (2 * (NUM_CHANNELS-1) + 1)      // Each sample: (No. of bioAmp channels * 2 bytes) + 1 counter
 #define BLOCK_COUNT 10                                    // Batch size: 10 samples per notification
 #define NEW_PACKET_LEN (BLOCK_COUNT * SINGLE_SAMPLE_LEN)  // New packet length (70 bytes)
 #define SAMP_RATE 500.0                                   // Sampling rate per channel (500 Hz)
@@ -428,7 +428,13 @@ void loop() {
 
 // Maps physical ADC channel id → logical index 0..NUM_CHANNELS-1
 static int8_t hw2idx[10];
+
+#if NUM_CHANNELS < 7
+  static const uint8_t hw_chs[4] = { 0, 1, 2, 6 };
 static const uint8_t hw_chs[NUM_CHANNELS] = { 0, 1, 2, 6 };
+#else
+  static const uint8_t hw_chs[7] = { 0, 1, 2, 3, 4, 5, 6 };
+#endif
 
 
 static void adc_dma_init() {
