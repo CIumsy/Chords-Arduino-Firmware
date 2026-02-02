@@ -312,6 +312,21 @@ void checkInitialBattery() {
   }
   float initialBatteryVoltage = sum / 10.0;  // Average voltage
   float initialBatteryPercentage = interpolatePercentage(initialBatteryVoltage);
+  if(initialBatteryPercentage< 5.0)
+  {
+    pixels.setPixelColor(1, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red when below 5%
+    pixels.show();
+  }
+  else if(initialBatteryPercentage < 50.0)
+  {
+    pixels.setPixelColor(1, pixels.Color(15, 4, 0));  // Orange when below 50%
+    pixels.show();
+  }
+  else if(initialBatteryPercentage >= 50.0)
+  {
+    pixels.setPixelColor(1, pixels.Color(0, PIXEL_BRIGHTNESS, 0));  // Green when above 50%
+    pixels.show();
+  }
 }
 
 void checkChannelCount() {
