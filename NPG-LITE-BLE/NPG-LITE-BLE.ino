@@ -263,7 +263,7 @@ class ControlCallback : public BLECharacteristicCallbacks {
 };
 
 void checkBatteryAndDisconnect() {
-  float voltage = (latestBatteryRaw / 1000.0) * 2;  // ESP32C6 v0.1
+  float voltage = (latestBatteryRaw / 1000.0) * 2;  // for ESP32C6 v0.1
   voltage = voltage - 0.02;
   float percentage = interpolatePercentage(voltage);
   // Send battery percentage as single byte (0-100)
@@ -300,6 +300,20 @@ void checkBatteryAndDisconnect() {
   }
 }
 
+void checkInitialBattery() {
+  float sum = 0.0;
+  for(int i = 0; i < 10; i++)    // Collect battery voltage samples for 10ms
+  {
+    int analogValue = analogRead(A6);
+    float voltage = (analogValue/1000.0) * 2;  // for ESP32C6 v0.1
+    voltage = voltage - 0.02;
+    sum += voltage;
+    delay(1);
+  }
+  float initialBatteryVoltage = sum / 10.0;  // Average voltage
+  float initialBatteryPercentage = interpolatePercentage(initialBatteryVoltage);
+}
+
 void checkChannelCount() {
   // Check for Beast Playmate (6 channels)     
   pinMode(A3, INPUT_PULLUP);
@@ -325,14 +339,14 @@ void setup() {
   pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red (power on)
   pixels.show();
 
-
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
-
 
   setCpuFrequencyMhz(80);
 
   checkChannelCount();   // Check for Beast Playmate
+
+  checkInitialBattery();  // Check initial battery status
 
   // Create binary semaphore for ADC data ready signaling
   adc_data_semaphore = xSemaphoreCreateBinary();
