@@ -312,19 +312,40 @@ void checkInitialBattery() {
   }
   float initialBatteryVoltage = sum / 10.0;  // Average voltage
   float initialBatteryPercentage = interpolatePercentage(initialBatteryVoltage);  // Calculate battery percentage from LUT
+
+  // If battery is low, slowly blink the neopixel
   if(initialBatteryPercentage< 5.0)
   {
-    pixels.setPixelColor(1, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red when below 5%
-    pixels.show();
-  }
-  else if(initialBatteryPercentage < 50.0)
-  {
-    pixels.setPixelColor(1, pixels.Color(15, 4, 0));  // Orange when below 50%
-    pixels.show();
-  }
-  else if(initialBatteryPercentage >= 50.0)
-  {
-    pixels.setPixelColor(1, pixels.Color(0, PIXEL_BRIGHTNESS, 0));  // Green when above 50%
+    // Fader-style slow blink (10 cycles)
+    uint8_t cycles = 0;
+    uint16_t fader = PIXEL_BRIGHTNESS;
+    bool decreasing = true;
+
+    while (cycles < 10) {
+      pixels.clear();
+      pixels.setPixelColor(0, pixels.Color(fader, 0, 0));
+      pixels.show();
+      delay(20);
+
+      if (decreasing)
+      {
+        fader = fader - 2;
+        if (fader < 10)
+        {
+          decreasing = false;
+        }
+      }
+      else 
+      {
+        fader = fader + 2;
+        if (fader > 100)
+        {
+          decreasing = true;
+          cycles++;
+        }
+      }
+    }
+    pixels.clear();
     pixels.show();
   }
 }
