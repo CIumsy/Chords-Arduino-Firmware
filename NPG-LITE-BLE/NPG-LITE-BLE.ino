@@ -264,12 +264,22 @@ void checkBatteryAndDisconnect() {
   uint8_t batteryByte = (uint8_t)percentage;
   pBatteryCharacteristic->setValue(&batteryByte, 1);
   pBatteryCharacteristic->notify();
-  if (percentage < 5.0) {
+  if(percentage > 50.0)
+  {
+    pixels.setPixelColor(1, pixels.Color(0, PIXEL_BRIGHTNESS, 0));  // Green when above 50%
+    pixels.show();
+  }
+  else if(percentage <= 50.0 && percentage >= 5.0 )
+  {
+    pixels.setPixelColor(1, pixels.Color(15, 4, 0));  // Orange when below 50%
+    pixels.show();
+  }
+  else if (percentage < 5.0) {
     // Stop streaming
     streaming = false;
     adc_stop_requested = true;  // Request stop
 
-    pixels.setPixelColor(1, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red
+    pixels.setPixelColor(1, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red when below 5%
     pixels.show();
 
     // Disconnect BLE client if connected
