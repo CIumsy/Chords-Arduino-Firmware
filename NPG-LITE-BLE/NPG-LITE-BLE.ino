@@ -347,6 +347,7 @@ void checkInitialBattery() {
     }
     pixels.clear();
     pixels.show();
+    esp_deep_sleep_start();  // Enter deep sleep after blinking sequence
   }
 }
 
