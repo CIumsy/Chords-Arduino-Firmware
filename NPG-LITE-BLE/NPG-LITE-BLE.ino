@@ -287,9 +287,6 @@ void checkBatteryAndDisconnect() {
     streaming = false;
     adc_stop_requested = true;  // Request stop
 
-    pixels.setPixelColor(5, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red when below 5%
-    pixels.show();
-
     // Disconnect BLE client if connected
     if (pBLEServer != nullptr && pBLEServer->getConnectedCount() > 0) {
       // Get connection ID from first connected client
@@ -299,33 +296,19 @@ void checkBatteryAndDisconnect() {
         pBLEServer->disconnect(connId);  // Use public disconnect method
       }
     }
+    sleepWhenLowBattery();
   }
 }
 
-void checkInitialBattery() {
-  float sum = 0.0;
-  for(int i = 0; i < 10; i++)    // Collect battery voltage samples for 10ms
-  {
-    int analogValue = analogRead(A6);
-    float voltage = (analogValue/1000.0) * 2;  // for ESP32C6 v0.1
-    voltage = voltage - 0.02;
-    sum += voltage;
-    delay(1);
-  }
-  float initialBatteryVoltage = sum / 10.0;  // Average voltage
-  float initialBatteryPercentage = interpolatePercentage(initialBatteryVoltage);  // Calculate battery percentage from LUT
-
-  // If battery is low, slowly blink the neopixel
-  if(initialBatteryPercentage< BOOT_MIN_BATTERY)
-  {
-    // Fader-style slow blink (10 cycles)
+void sleepWhenLowBattery() {
+  // Fader-style slow blink (10 cycles)
     uint8_t cycles = 0;
-    uint16_t fader = PIXEL_BRIGHTNESS;
+    uint16_t fader = 100;
     bool decreasing = true;
 
     while (cycles < 10) {
       pixels.clear();
-      pixels.setPixelColor(0, pixels.Color(fader, 0, 0));
+      pixels.setPixelColor(5, pixels.Color(fader, 0, 0));
       pixels.show();
       delay(20);
 
@@ -350,6 +333,25 @@ void checkInitialBattery() {
     pixels.clear();
     pixels.show();
     esp_deep_sleep_start();  // Enter deep sleep after blinking sequence
+}
+
+void checkInitialBattery() {
+  float sum = 0.0;
+  for(int i = 0; i < 10; i++)    // Collect battery voltage samples for 10ms
+  {
+    int analogValue = analogRead(A6);
+    float voltage = (analogValue/1000.0) * 2;  // for ESP32C6 v0.1
+    voltage = voltage - 0.02;
+    sum += voltage;
+    delay(1);
+  }
+  float initialBatteryVoltage = sum / 10.0;  // Average voltage
+  float initialBatteryPercentage = interpolatePercentage(initialBatteryVoltage);  // Calculate battery percentage from LUT
+
+  // If battery is low, slowly blink the neopixel
+  if(initialBatteryPercentage< BOOT_MIN_BATTERY)
+  {
+    sleepWhenLowBattery();
   }
 }
 
@@ -375,8 +377,6 @@ void checkChannelCount() {
 void setup() {
   // ----- LEDs -----
   pixels.begin();
-  pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red (power on)
-  pixels.show();
 
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
@@ -386,6 +386,9 @@ void setup() {
   checkChannelCount();   // Check for Beast Playmate
 
   checkInitialBattery();  // Check initial battery status
+
+  pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red (power on)
+  pixels.show();
 
   // Create binary semaphore for ADC data ready signaling
   adc_data_semaphore = xSemaphoreCreateBinary();
