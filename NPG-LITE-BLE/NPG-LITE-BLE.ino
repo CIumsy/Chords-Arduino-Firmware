@@ -345,8 +345,10 @@ void setup() {
 
   // ----- Initialize BLE -----
   char deviceName[36];
-  sprintf(deviceName, "NPG-%02X:%02X:%02X:%02X:%02X:%02X",
-          mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  if(beast)
+    sprintf(deviceName, "NPG-Lite-6Ch:%02X:%02X", mac[4], mac[5]);
+  else
+    sprintf(deviceName, "NPG-Lite-3Ch:%02X:%02X", mac[4], mac[5]);
   BLEDevice::init(deviceName);
 
 
