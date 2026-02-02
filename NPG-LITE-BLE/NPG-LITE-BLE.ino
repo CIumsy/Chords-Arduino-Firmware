@@ -430,10 +430,9 @@ void loop() {
 static int8_t hw2idx[10];
 
 #if NUM_CHANNELS < 7
-  static const uint8_t hw_chs[4] = { 0, 1, 2, 6 };
-static const uint8_t hw_chs[NUM_CHANNELS] = { 0, 1, 2, 6 };
+  static const uint8_t hw_chs[NUM_CHANNELS] = { 0, 1, 2, 6 };
 #else
-  static const uint8_t hw_chs[7] = { 0, 1, 2, 3, 4, 5, 6 };
+  static const uint8_t hw_chs[NUM_CHANNELS] = { 0, 1, 2, 3, 4, 5, 6 };
 #endif
 
 
