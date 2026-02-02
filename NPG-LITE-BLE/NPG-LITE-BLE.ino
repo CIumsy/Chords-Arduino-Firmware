@@ -26,7 +26,7 @@
 */
 
 
-// ----- Existing Includes -----
+// BLE includes
 #include <Arduino.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
@@ -42,7 +42,7 @@
 #include "freertos/semphr.h"
 
 
-// ----- New low-power / BLE / ADC includes -----
+// ADC includes
 #include "esp_bt.h"                  // release Classic BT memory
 #include "esp_adc/adc_continuous.h"  // ADC continuous (DMA) driver
 #include "hal/adc_types.h"           // adc_atten_t, bit width, etc.
@@ -71,13 +71,14 @@ uint32_t chiprev = efuse_hal_chip_revision();
 #define BLOCK_COUNT 10                                    // Batch size: 10 samples per notification
 #define SAMP_RATE 500.0                                   // Sampling rate per channel (500 Hz)
 #define ADC_CONV_BYTES SOC_ADC_DIGI_RESULT_BYTES          // Number of bytes per ADC conversion result in continuous mode
-#define BATTERY_PIN A6
+#define BATTERY_PIN A6                                    // Battery voltage pin
 
 // Global variables for Channel count and packet size
 static uint8_t NUM_CHANNELS = 4;        // Number of BioAmp channels + 1 channel for battery
 static uint8_t SINGLE_SAMPLE_LEN = 0;   // Each sample: (No. of bioAmp channels * 2 bytes) + 1 counter
 static uint16_t NEW_PACKET_LEN = 0;     // Packet length (BLOCK_COUNT * SINGLE_SAMPLE_LEN)
 
+// Recompute packet sizes to adjust for channel count changes
 static inline void recomputePacketSizes() {
   SINGLE_SAMPLE_LEN = (uint8_t)(2 * (NUM_CHANNELS - 1) + 1);
   NEW_PACKET_LEN = (uint16_t)(BLOCK_COUNT * SINGLE_SAMPLE_LEN);
@@ -85,7 +86,6 @@ static inline void recomputePacketSizes() {
 
 // Onboard Neopixel at PIXEL_PIN
 Adafruit_NeoPixel pixels(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
-
 
 // Battery monitoring variables
 static unsigned long lastBatteryCheck = 0;
@@ -128,7 +128,7 @@ float interpolatePercentage(float voltage) {
 }
 
 
-// BLE UUIDs – change if desired.
+// BLE UUIDs
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define DATA_CHAR_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"     // For ADC data (Notify only)
 #define CONTROL_CHAR_UUID "0000ff01-0000-1000-8000-00805f9b34fb"  // For commands (Read/Write/Notify)
@@ -178,7 +178,6 @@ static esp_ble_adv_params_t advParams = {
 };
 
 // Helper macros to parse DMA results as TYPE2 format on C3/C6
-// (channel and data fields are in adc_digi_output_data_t::type2)
 #define ADC_OUTPUT_TYPE ADC_DIGI_OUTPUT_FORMAT_TYPE2
 #define ADC_GET_CHANNEL(p) ((p)->type2.channel)
 #define ADC_GET_DATA(p) ((p)->type2.data)
@@ -202,15 +201,16 @@ class MyServerCallbacks : public BLEServerCallbacks {
     digitalWrite(LED_BUILTIN, LOW);
 
 
-    // Apply -3 dBm to the active connection (handle 0 for first/only connection)
+    // Apply -3 dBm to the active connection
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_CONN_HDL0, ESP_PWR_LVL_N3);
     esp_ble_gap_stop_advertising();  // Explicitly stop advertising
   }
 
 
   void onDisconnect(BLEServer *pServer) override {
-    pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red
+    pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red on disconnect
     pixels.show();
+    // Vibrate twice on disconnect
     digitalWrite(LED_BUILTIN, HIGH);
     delay(200);
     digitalWrite(LED_BUILTIN, LOW);
@@ -314,6 +314,23 @@ void setup() {
 
   setCpuFrequencyMhz(80);
 
+  // Check for Beast Playmate (6 channels)
+  bool beast = false;     
+  pinMode(A3, INPUT_PULLUP);
+  pinMode(A4, INPUT_PULLUP);
+  pinMode(A5, INPUT_PULLUP);
+  for (int i = 0; i < 10; i++) {
+    if (digitalRead(A3) == LOW) beast = true;
+    if (digitalRead(A4) == LOW) beast = true;
+    if (digitalRead(A5) == LOW) beast = true;
+    delay(10);
+  }
+  // Configure active channels and packet sizes
+  if(beast)
+    NUM_CHANNELS = 7;
+  else
+    NUM_CHANNELS = 4;
+  recomputePacketSizes();
 
   // Create binary semaphore for ADC data ready signaling
   adc_data_semaphore = xSemaphoreCreateBinary();
@@ -321,14 +338,10 @@ void setup() {
     while (1);  // Halt
   }
 
-
   esp_read_mac(mac, ESP_MAC_EFUSE_FACTORY);
 
-
   // ----- BLE-only memory footprint (free Classic BT) -----
-  // Must be called before the BLE stack is initialized
   esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
-
 
   // ----- Initialize BLE -----
   char deviceName[36];
@@ -345,18 +358,15 @@ void setup() {
   // Optional larger MTU for efficiency (doesn't change packet format)
   BLEDevice::setMTU(500);
 
-
   pBLEServer = BLEDevice::createServer();
   pBLEServer->setCallbacks(new MyServerCallbacks());
   BLEService *pService = pBLEServer->createService(SERVICE_UUID);
-
 
   // Data Characteristic (Notify only) for ADC data
   pDataCharacteristic = pService->createCharacteristic(
     DATA_CHAR_UUID,
     BLECharacteristic::PROPERTY_NOTIFY);
   pDataCharacteristic->addDescriptor(new BLE2902());
-
 
   // Control Characteristic (Read/Write/Notify)
   pControlCharacteristic = pService->createCharacteristic(
@@ -370,9 +380,7 @@ void setup() {
     BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   pBatteryCharacteristic->addDescriptor(new BLE2902());
 
-
   pService->start();
-
 
   // Configure advertising data to include device name
   esp_ble_adv_data_t adv_data = {};
@@ -390,30 +398,12 @@ void setup() {
   adv_data.p_service_uuid = nullptr;
   adv_data.flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
 
-
   esp_ble_gap_config_adv_data(&adv_data);
 
 
   // Stop Arduino's advertising helper and start with our params
   BLEDevice::getAdvertising()->stop();  // if it was started elsewhere
   esp_ble_gap_start_advertising(&advParams);
-
-  bool beast = false;     // Beast has 6 channels
-  pinMode(A3, INPUT_PULLUP);
-  pinMode(A4, INPUT_PULLUP);
-  pinMode(A5, INPUT_PULLUP);
-  for (int i = 0; i < 10; i++) {
-    if (digitalRead(A3) == LOW) beast = true;
-    if (digitalRead(A4) == LOW) beast = true;
-    if (digitalRead(A5) == LOW) beast = true;
-    delay(10);
-  }
-  // Configure active channels and derived packet sizes.
-  if(beast)
-    NUM_CHANNELS = 7;
-  else
-    NUM_CHANNELS = 4;
-  recomputePacketSizes();
 
 }
 
