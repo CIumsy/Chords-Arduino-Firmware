@@ -311,7 +311,7 @@ void checkInitialBattery() {
     delay(1);
   }
   float initialBatteryVoltage = sum / 10.0;  // Average voltage
-  float initialBatteryPercentage = interpolatePercentage(initialBatteryVoltage);
+  float initialBatteryPercentage = interpolatePercentage(initialBatteryVoltage);  // Calculate battery percentage from LUT
   if(initialBatteryPercentage< 5.0)
   {
     pixels.setPixelColor(1, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red when below 5%
@@ -475,20 +475,19 @@ void loop() {
 // Maps physical ADC channel id → logical index 0..NUM_CHANNELS-1
 static int8_t hw2idx[10];
 
-static const uint8_t hw_chs_4[4] = { 0, 1, 2, 6 };
-static const uint8_t hw_chs_7[7] = { 0, 1, 2, 3, 4, 5, 6 };
+static const uint8_t hw_chs_4[4] = { 0, 1, 2, 6 };   // Configuration for 3 BioAmp Channels
+static const uint8_t hw_chs_7[7] = { 0, 1, 2, 3, 4, 5, 6 };  // Configuration for 6 BioAmp Channels
 
 static void adc_dma_init() {
 
-
   static adc_digi_pattern_config_t pattern[NUM_CHANNELS_MAX];
-  const uint8_t *hw_chs = (NUM_CHANNELS == 7) ? hw_chs_7 : hw_chs_4;
+  const uint8_t *hw_chs = (NUM_CHANNELS == 7) ? hw_chs_7 : hw_chs_4;  // Use appropriate channel configuration
 
   // Build pattern from the single channel list
   for (int i = 0; i < NUM_CHANNELS; i++) {
     pattern[i].atten = ADC_ATTEN_DB_11;
-    pattern[i].channel = hw_chs[i];  // ← use physical channel id
-    pattern[i].unit = ADC_UNIT_1;    // ADC1 only
+    pattern[i].channel = hw_chs[i];  // Use physical channel id
+    pattern[i].unit = ADC_UNIT_1;  
     pattern[i].bit_width = ADC_BITWIDTH_12;
   }
 
@@ -585,8 +584,7 @@ static void handle_adc_dma_and_notify() {
   }
 
 
-  // Assemble triplets (ch0, ch1, ch2) into your 7-byte sample packets
-  // Maintain a small staging for latest values per channel and a mask
+  // Assemble Channel data into sample packets
   static uint16_t last_vals[NUM_CHANNELS_MAX] = { 0 };
   static uint8_t have_mask = 0;
   const uint8_t FULL_MASK = (1u << NUM_CHANNELS) - 1;
@@ -636,7 +634,7 @@ static void handle_adc_dma_and_notify() {
       }
     }
 
-    // When we have all 3 channels, emit one 7-byte record DIRECTLY to batchBuffer
+    // When we have all channels, emit one record DIRECTLY to batchBuffer
     if (have_mask == FULL_MASK) {
       // Calculate offset in batchBuffer
       uint16_t offset = sampleIndex * SINGLE_SAMPLE_LEN;
@@ -653,9 +651,7 @@ static void handle_adc_dma_and_notify() {
         batchBuffer[offset + 1 + c * 2 + 1] = (uint8_t)(v & 0xFF);
       }
 
-
       sampleIndex++;
-
 
       // Notify every BLOCK_COUNT samples
       if (sampleIndex >= BLOCK_COUNT) {
