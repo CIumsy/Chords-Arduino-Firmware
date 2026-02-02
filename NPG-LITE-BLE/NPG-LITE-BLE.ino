@@ -72,6 +72,8 @@ uint32_t chiprev = efuse_hal_chip_revision();
 #define SAMP_RATE 500.0                                   // Sampling rate per channel (500 Hz)
 #define ADC_CONV_BYTES SOC_ADC_DIGI_RESULT_BYTES          // Number of bytes per ADC conversion result in continuous mode
 #define BATTERY_PIN A6                                    // Battery voltage pin
+#define BOOT_MIN_BATTERY 10.0                             // Minimum battery percentage to boot
+#define STREAMING_MIN_BATTERY 5.0                         // Minimum battery percentage to start streaming
 
 // Global variables for Channel count and packet size
 static uint8_t NUM_CHANNELS = 4;        // Number of BioAmp channels + 1 channel for battery
@@ -272,20 +274,20 @@ void checkBatteryAndDisconnect() {
   pBatteryCharacteristic->notify();
   if(percentage > 50.0)
   {
-    pixels.setPixelColor(1, pixels.Color(0, PIXEL_BRIGHTNESS, 0));  // Green when above 50%
+    pixels.setPixelColor(5, pixels.Color(0, PIXEL_BRIGHTNESS, 0));  // Green when above 50%
     pixels.show();
   }
   else if(percentage <= 50.0 && percentage >= 5.0 )
   {
-    pixels.setPixelColor(1, pixels.Color(15, 4, 0));  // Orange when below 50%
+    pixels.setPixelColor(5, pixels.Color(15, 4, 0));  // Orange when below 50%
     pixels.show();
   }
-  else if (percentage < 5.0) {
+  else if (percentage < STREAMING_MIN_BATTERY) {
     // Stop streaming
     streaming = false;
     adc_stop_requested = true;  // Request stop
 
-    pixels.setPixelColor(1, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red when below 5%
+    pixels.setPixelColor(5, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red when below 5%
     pixels.show();
 
     // Disconnect BLE client if connected
@@ -314,7 +316,7 @@ void checkInitialBattery() {
   float initialBatteryPercentage = interpolatePercentage(initialBatteryVoltage);  // Calculate battery percentage from LUT
 
   // If battery is low, slowly blink the neopixel
-  if(initialBatteryPercentage< 5.0)
+  if(initialBatteryPercentage< BOOT_MIN_BATTERY)
   {
     // Fader-style slow blink (10 cycles)
     uint8_t cycles = 0;
@@ -399,9 +401,9 @@ void setup() {
   // ----- Initialize BLE -----
   char deviceName[36];
   if(isBeastPlaymate)
-    sprintf(deviceName, "NPG-Lite-6Ch:%02X:%02X", mac[4], mac[5]);
+    sprintf(deviceName, "NPG-Lite-6CH:%02X:%02X", mac[4], mac[5]);
   else
-    sprintf(deviceName, "NPG-Lite-3Ch:%02X:%02X", mac[4], mac[5]);
+    sprintf(deviceName, "NPG-Lite-3CH:%02X:%02X", mac[4], mac[5]);
   BLEDevice::init(deviceName);
 
 
