@@ -66,16 +66,22 @@ uint32_t chiprev = efuse_hal_chip_revision();
 #error "Unsupported board: Please target either ESP32-C6 or ESP32-C3 in your Board Manager."
 #endif
 
-
+#define NUM_CHANNELS_MAX 7                                // Max channels supported (Beast Playmate)
 #define PIXEL_BRIGHTNESS 7                                // Brightness of Neopixel LED
-#define NUM_CHANNELS 4                                    // Number of BioAmp channels + 1 channel for battery
-#define SINGLE_SAMPLE_LEN (2 * (NUM_CHANNELS-1) + 1)      // Each sample: (No. of bioAmp channels * 2 bytes) + 1 counter
 #define BLOCK_COUNT 10                                    // Batch size: 10 samples per notification
-#define NEW_PACKET_LEN (BLOCK_COUNT * SINGLE_SAMPLE_LEN)  // New packet length (70 bytes)
 #define SAMP_RATE 500.0                                   // Sampling rate per channel (500 Hz)
 #define ADC_CONV_BYTES SOC_ADC_DIGI_RESULT_BYTES          // Number of bytes per ADC conversion result in continuous mode
 #define BATTERY_PIN A6
 
+// Global variables for Channel count and packet size
+static uint8_t NUM_CHANNELS = 4;        // Number of BioAmp channels + 1 channel for battery
+static uint8_t SINGLE_SAMPLE_LEN = 0;   // Each sample: (No. of bioAmp channels * 2 bytes) + 1 counter
+static uint16_t NEW_PACKET_LEN = 0;     // Packet length (BLOCK_COUNT * SINGLE_SAMPLE_LEN)
+
+static inline void recomputePacketSizes() {
+  SINGLE_SAMPLE_LEN = (uint8_t)(2 * (NUM_CHANNELS - 1) + 1);
+  NEW_PACKET_LEN = (uint16_t)(BLOCK_COUNT * SINGLE_SAMPLE_LEN);
+}
 
 // Onboard Neopixel at PIXEL_PIN
 Adafruit_NeoPixel pixels(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
@@ -130,7 +136,7 @@ float interpolatePercentage(float voltage) {
 
 
 // ----- Global Variables -----
-uint8_t batchBuffer[NEW_PACKET_LEN] = { 0 };  // Buffer to accumulate BLOCK_COUNT samples
+uint8_t batchBuffer[BLOCK_COUNT * (2 * (NUM_CHANNELS_MAX - 1) + 1)] = { 0 };  // Buffer to accumulate BLOCK_COUNT samples
 volatile int sampleIndex = 0;     // How many samples accumulated in current batch
 volatile bool streaming = false;  // True when "START" command is received
 uint8_t mac[6];                   // Array to store 6-byte MAC address
@@ -163,8 +169,8 @@ static adc_continuous_handle_t adc_handle = nullptr;
 static bool adc_started = false;
 static SemaphoreHandle_t adc_data_semaphore = nullptr;
 static esp_ble_adv_params_t advParams = {
-  .adv_int_min = 0x0680,
-  .adv_int_max = 0x0680,
+  .adv_int_min = 0x0040,
+  .adv_int_max = 0x0050,
   .adv_type = ADV_TYPE_IND,
   .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
   .channel_map = ADV_CHNL_ALL,
@@ -391,8 +397,25 @@ void setup() {
   // Stop Arduino's advertising helper and start with our params
   BLEDevice::getAdvertising()->stop();  // if it was started elsewhere
   esp_ble_gap_start_advertising(&advParams);
-}
 
+  bool beast = false;     // Beast has 6 channels
+  pinMode(A3, INPUT_PULLUP);
+  pinMode(A4, INPUT_PULLUP);
+  pinMode(A5, INPUT_PULLUP);
+  for (int i = 0; i < 10; i++) {
+    if (digitalRead(A3) == LOW) beast = true;
+    if (digitalRead(A4) == LOW) beast = true;
+    if (digitalRead(A5) == LOW) beast = true;
+    delay(10);
+  }
+  // Configure active channels and derived packet sizes.
+  if(beast)
+    NUM_CHANNELS = 7;
+  else
+    NUM_CHANNELS = 4;
+  recomputePacketSizes();
+
+}
 
 void loop() {
   // Handle start/stop requests of adc_continuous_mode
@@ -429,18 +452,14 @@ void loop() {
 // Maps physical ADC channel id → logical index 0..NUM_CHANNELS-1
 static int8_t hw2idx[10];
 
-#if NUM_CHANNELS < 7
-  static const uint8_t hw_chs[NUM_CHANNELS] = { 0, 1, 2, 6 };
-#else
-  static const uint8_t hw_chs[NUM_CHANNELS] = { 0, 1, 2, 3, 4, 5, 6 };
-#endif
-
+static const uint8_t hw_chs_4[4] = { 0, 1, 2, 6 };
+static const uint8_t hw_chs_7[7] = { 0, 1, 2, 3, 4, 5, 6 };
 
 static void adc_dma_init() {
 
 
-  static adc_digi_pattern_config_t pattern[NUM_CHANNELS];
-
+  static adc_digi_pattern_config_t pattern[NUM_CHANNELS_MAX];
+  const uint8_t *hw_chs = (NUM_CHANNELS == 7) ? hw_chs_7 : hw_chs_4;
 
   // Build pattern from the single channel list
   for (int i = 0; i < NUM_CHANNELS; i++) {
@@ -535,7 +554,7 @@ static inline uint16_t fix_raw_if_needed(uint16_t raw) {
 
 static void handle_adc_dma_and_notify() {
   // Read whatever DMA has buffered; non-blocking with short buffer
-  uint8_t dma_buf[NUM_CHANNELS * ADC_CONV_BYTES * BLOCK_COUNT];
+  uint8_t dma_buf[NUM_CHANNELS_MAX * ADC_CONV_BYTES * BLOCK_COUNT];
   uint32_t ret_len = 0;
   esp_err_t ret = adc_continuous_read(adc_handle, dma_buf, sizeof(dma_buf), &ret_len, 0);
   if (ret != ESP_OK || ret_len == 0) {
@@ -545,7 +564,7 @@ static void handle_adc_dma_and_notify() {
 
   // Assemble triplets (ch0, ch1, ch2) into your 7-byte sample packets
   // Maintain a small staging for latest values per channel and a mask
-  static uint16_t last_vals[NUM_CHANNELS] = { 0 };
+  static uint16_t last_vals[NUM_CHANNELS_MAX] = { 0 };
   static uint8_t have_mask = 0;
   const uint8_t FULL_MASK = (1u << NUM_CHANNELS) - 1;
 
@@ -556,7 +575,7 @@ static void handle_adc_dma_and_notify() {
     uint16_t raw = ADC_GET_DATA(p);
     // map physical channel → logical index (0..NUM_CHANNELS-1)
     int8_t idx = (ch_hw < (uint8_t)sizeof(hw2idx)) ? hw2idx[ch_hw] : -1;
-    if (idx >= 0) {
+    if (idx >= 0 && idx < (int8_t)NUM_CHANNELS) {
       // Apply fix only to BioAmp channels (A0-A5), NOT battery (A6)
       if (idx < (NUM_CHANNELS-1)) {
         last_vals[idx] = fix_raw_if_needed(raw);
