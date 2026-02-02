@@ -557,8 +557,8 @@ static void handle_adc_dma_and_notify() {
     // map physical channel → logical index (0..NUM_CHANNELS-1)
     int8_t idx = (ch_hw < (uint8_t)sizeof(hw2idx)) ? hw2idx[ch_hw] : -1;
     if (idx >= 0) {
-      // Apply fix only to BioAmp channels (0,1,2), NOT battery (3)
-      if (idx < 3) {
+      // Apply fix only to BioAmp channels (A0-A5), NOT battery (A6)
+      if (idx < (NUM_CHANNELS-1)) {
         last_vals[idx] = fix_raw_if_needed(raw);
       } else {
         last_vals[idx] = raw;  // Battery channel: use raw value
@@ -566,8 +566,8 @@ static void handle_adc_dma_and_notify() {
       have_mask |= (1u << idx);
 
 
-      // Store battery reading (channel 6 = index 3) with rolling average
-      if (idx == 3) {
+      // Store battery reading with rolling average
+      if (idx == (NUM_CHANNELS-1)) {
         uint16_t newSample = last_vals[idx];
         
         // Subtract oldest value from sum
