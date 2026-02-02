@@ -77,6 +77,7 @@ uint32_t chiprev = efuse_hal_chip_revision();
 static uint8_t NUM_CHANNELS = 4;        // Number of BioAmp channels + 1 channel for battery
 static uint8_t SINGLE_SAMPLE_LEN = 0;   // Each sample: (No. of bioAmp channels * 2 bytes) + 1 counter
 static uint16_t NEW_PACKET_LEN = 0;     // Packet length (BLOCK_COUNT * SINGLE_SAMPLE_LEN)
+static bool isBeastPlaymate = false;
 
 // Recompute packet sizes to adjust for channel count changes
 static inline void recomputePacketSizes() {
@@ -261,7 +262,6 @@ class ControlCallback : public BLECharacteristicCallbacks {
   }
 };
 
-
 void checkBatteryAndDisconnect() {
   float voltage = (latestBatteryRaw / 1000.0) * 2;  // ESP32C6 v0.1
   voltage = voltage - 0.02;
@@ -300,6 +300,24 @@ void checkBatteryAndDisconnect() {
   }
 }
 
+void checkChannelCount() {
+  // Check for Beast Playmate (6 channels)     
+  pinMode(A3, INPUT_PULLUP);
+  pinMode(A4, INPUT_PULLUP);
+  pinMode(A5, INPUT_PULLUP);
+  for (int i = 0; i < 10; i++) {    // Collect samples for 10ms
+    if (digitalRead(A3) == LOW) isBeastPlaymate = true;
+    if (digitalRead(A4) == LOW) isBeastPlaymate = true;
+    if (digitalRead(A5) == LOW) isBeastPlaymate = true;
+    delay(1);
+  }
+  // Configure active channels and packet sizes
+  if(isBeastPlaymate)
+    NUM_CHANNELS = 7;
+  else
+    NUM_CHANNELS = 4;
+  recomputePacketSizes();
+}
 
 void setup() {
   // ----- LEDs -----
@@ -314,23 +332,7 @@ void setup() {
 
   setCpuFrequencyMhz(80);
 
-  // Check for Beast Playmate (6 channels)
-  bool beast = false;     
-  pinMode(A3, INPUT_PULLUP);
-  pinMode(A4, INPUT_PULLUP);
-  pinMode(A5, INPUT_PULLUP);
-  for (int i = 0; i < 10; i++) {
-    if (digitalRead(A3) == LOW) beast = true;
-    if (digitalRead(A4) == LOW) beast = true;
-    if (digitalRead(A5) == LOW) beast = true;
-    delay(10);
-  }
-  // Configure active channels and packet sizes
-  if(beast)
-    NUM_CHANNELS = 7;
-  else
-    NUM_CHANNELS = 4;
-  recomputePacketSizes();
+  checkChannelCount();   // Check for Beast Playmate
 
   // Create binary semaphore for ADC data ready signaling
   adc_data_semaphore = xSemaphoreCreateBinary();
@@ -345,7 +347,7 @@ void setup() {
 
   // ----- Initialize BLE -----
   char deviceName[36];
-  if(beast)
+  if(isBeastPlaymate)
     sprintf(deviceName, "NPG-Lite-6Ch:%02X:%02X", mac[4], mac[5]);
   else
     sprintf(deviceName, "NPG-Lite-3Ch:%02X:%02X", mac[4], mac[5]);
@@ -357,7 +359,7 @@ void setup() {
   esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_N3);
   esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_SCAN, ESP_PWR_LVL_N3);
 
-  // Optional larger MTU for efficiency (doesn't change packet format)
+  // larger MTU for efficiency (doesn't change packet format)
   BLEDevice::setMTU(500);
 
   pBLEServer = BLEDevice::createServer();
@@ -387,7 +389,7 @@ void setup() {
   // Configure advertising data to include device name
   esp_ble_adv_data_t adv_data = {};
   adv_data.set_scan_rsp = false;
-  adv_data.include_name = true;  // ← KEY: include "NPG-<MAC>" in advertising
+  adv_data.include_name = true;  
   adv_data.include_txpower = false;
   adv_data.min_interval = 0x0006;
   adv_data.max_interval = 0x0010;
