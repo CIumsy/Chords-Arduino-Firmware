@@ -152,8 +152,8 @@ uint8_t overallCounter = 0;
 
 // Battery monitoring - stores latest ADC reading from A6
 static volatile uint16_t latestBatteryRaw = 2111; // Initially set to 2111 indicating 100% battery to avoid connection issues
-// Rolling average buffer for battery (1000 samples = 2 seconds @ 500Hz)
-#define BATTERY_AVG_SAMPLES 1000
+// Rolling average buffer for battery (2000 samples = 4 seconds @ 500Hz)
+#define BATTERY_AVG_SAMPLES 2000
 static uint16_t batteryBuffer[BATTERY_AVG_SAMPLES] = {0};
 static uint16_t batteryIndex = 0;
 static uint32_t batterySum = 0; // Initialize with startup value
