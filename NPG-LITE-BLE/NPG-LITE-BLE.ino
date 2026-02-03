@@ -25,7 +25,6 @@
    Thank you for being part of this journey with us!
 */
 
-
 // BLE includes
 #include <Arduino.h>
 #include <BLEDevice.h>
@@ -41,13 +40,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
-
 // ADC includes
-#include "esp_bt.h"                  // release Classic BT memory
-#include "esp_adc/adc_continuous.h"  // ADC continuous (DMA) driver
-#include "hal/adc_types.h"           // adc_atten_t, bit width, etc.
-#include "soc/soc_caps.h"            // SOC_ADC_DIGI_RESULT_BYTES
-
+#include "esp_bt.h"                 // release Classic BT memory
+#include "esp_adc/adc_continuous.h" // ADC continuous (DMA) driver
+#include "hal/adc_types.h"          // adc_atten_t, bit width, etc.
+#include "soc/soc_caps.h"           // SOC_ADC_DIGI_RESULT_BYTES
 
 // ----- Chip-specific Pin Definitions -----
 //
@@ -66,23 +63,24 @@ uint32_t chiprev = efuse_hal_chip_revision();
 #error "Unsupported board: Please target either ESP32-C6 or ESP32-C3 in your Board Manager."
 #endif
 
-#define NUM_CHANNELS_MAX 7                                // Max channels supported (Beast Playmate)
-#define PIXEL_BRIGHTNESS 7                                // Brightness of Neopixel LED
-#define BLOCK_COUNT 10                                    // Batch size: 10 samples per notification
-#define SAMP_RATE 500.0                                   // Sampling rate per channel (500 Hz)
-#define ADC_CONV_BYTES SOC_ADC_DIGI_RESULT_BYTES          // Number of bytes per ADC conversion result in continuous mode
-#define BATTERY_PIN A6                                    // Battery voltage pin
-#define BOOT_MIN_BATTERY 10.0                             // Minimum battery percentage to boot
-#define STREAMING_MIN_BATTERY 5.0                         // Minimum battery percentage to start streaming
+#define NUM_CHANNELS_MAX 7        // Max channels supported (Beast Playmate)
+#define BLE_PAYLOAD_BUFFERS 2     // Number of buffers for BLE payloads to prevent overflow (Change if you need more buffers)
+#define PIXEL_BRIGHTNESS 7        // Brightness of Neopixel LED
+#define BLOCK_COUNT 10            // Batch size: 10 samples per notification
+#define SAMP_RATE 500.0           // Sampling rate per channel (500 Hz)
+#define BATTERY_PIN A6            // Battery voltage pin
+#define BOOT_MIN_BATTERY 10.0     // Minimum battery percentage to boot
+#define STREAMING_MIN_BATTERY 5.0 // Minimum battery percentage to start streaming
 
 // Global variables for Channel count and packet size
-static uint8_t NUM_CHANNELS = 4;        // Number of BioAmp channels + 1 channel for battery
-static uint8_t SINGLE_SAMPLE_LEN = 0;   // Each sample: (No. of bioAmp channels * 2 bytes) + 1 counter
-static uint16_t NEW_PACKET_LEN = 0;     // Packet length (BLOCK_COUNT * SINGLE_SAMPLE_LEN)
+static uint8_t NUM_CHANNELS = 4;      // Number of BioAmp channels + 1 channel for battery
+static uint8_t SINGLE_SAMPLE_LEN = 0; // Each sample: (No. of bioAmp channels * 2 bytes) + 1 counter
+static uint16_t NEW_PACKET_LEN = 0;   // Packet length (BLOCK_COUNT * SINGLE_SAMPLE_LEN)
 static bool isBeastPlaymate = false;
 
 // Recompute packet sizes to adjust for channel count changes
-static inline void recomputePacketSizes() {
+static inline void recomputePacketSizes()
+{
   SINGLE_SAMPLE_LEN = (uint8_t)(2 * (NUM_CHANNELS - 1) + 1);
   NEW_PACKET_LEN = (uint16_t)(BLOCK_COUNT * SINGLE_SAMPLE_LEN);
 }
@@ -92,37 +90,33 @@ Adafruit_NeoPixel pixels(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 // Battery monitoring variables
 static unsigned long lastBatteryCheck = 0;
-static const unsigned long BATTERY_CHECK_INTERVAL = 10000;  // Interval in milliseconds
-static BLEServer *pBLEServer = nullptr;                      // Store server reference for disconnect
-
+static const unsigned long BATTERY_CHECK_INTERVAL = 10000; // Interval in milliseconds
+static BLEServer *pBLEServer = nullptr;                    // Store server reference for disconnect
 
 // LUT for 1S LiPo (Voltage in ascending order)
 const float voltageLUT[] = {
-  3.27, 3.61, 3.69, 3.71, 3.73, 3.75, 3.77, 3.79, 3.80, 3.82,
-  3.84, 3.85, 3.87, 3.91, 3.95, 3.98, 4.02, 4.08, 4.11, 4.15, 4.20
-};
-
+    3.27, 3.61, 3.69, 3.71, 3.73, 3.75, 3.77, 3.79, 3.80, 3.82,
+    3.84, 3.85, 3.87, 3.91, 3.95, 3.98, 4.02, 4.08, 4.11, 4.15, 4.20};
 
 const int percentLUT[] = {
-  0, 5, 10, 15, 20, 25, 30, 35, 40, 45,
-  50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100
-};
-
+    0, 5, 10, 15, 20, 25, 30, 35, 40, 45,
+    50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100};
 
 const int lutSize = sizeof(voltageLUT) / sizeof(voltageLUT[0]);
 
-
 // Linear interpolation function
-float interpolatePercentage(float voltage) {
+float interpolatePercentage(float voltage)
+{
   // Handle out-of-range voltages
-  if (voltage <= voltageLUT[0]) return 0;
-  if (voltage >= voltageLUT[lutSize - 1]) return 100;
-
+  if (voltage <= voltageLUT[0])
+    return 0;
+  if (voltage >= voltageLUT[lutSize - 1])
+    return 100;
 
   // Find the nearest LUT entries
   int i = 0;
-  while (i < lutSize - 1 && voltage > voltageLUT[i + 1]) i++;
-
+  while (i < lutSize - 1 && voltage > voltageLUT[i + 1])
+    i++;
 
   // Interpolate
   float v1 = voltageLUT[i], v2 = voltageLUT[i + 1];
@@ -130,41 +124,39 @@ float interpolatePercentage(float voltage) {
   return p1 + (voltage - v1) * (p2 - p1) / (v2 - v1);
 }
 
-
 // BLE UUIDs
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define DATA_CHAR_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"     // For ADC data (Notify only)
-#define CONTROL_CHAR_UUID "0000ff01-0000-1000-8000-00805f9b34fb"  // For commands (Read/Write/Notify)
-#define BATTERY_CHAR_UUID "f633d0ec-46b4-43c1-a39f-1ca06d0602e1"  // For battery status (Notify only)
-
+#define DATA_CHAR_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"    // For ADC data (Notify only)
+#define CONTROL_CHAR_UUID "0000ff01-0000-1000-8000-00805f9b34fb" // For commands (Read/Write/Notify)
+#define BATTERY_CHAR_UUID "f633d0ec-46b4-43c1-a39f-1ca06d0602e1" // For battery status (Notify only)
 
 // ----- Global Variables -----
-uint8_t batchBuffer[BLOCK_COUNT * (2 * (NUM_CHANNELS_MAX - 1) + 1)] = { 0 };  // Buffer to accumulate BLOCK_COUNT samples
-volatile int sampleIndex = 0;     // How many samples accumulated in current batch
-volatile bool streaming = false;  // True when "START" command is received
-uint8_t mac[6];                   // Array to store 6-byte MAC address
+uint8_t blePayload[BLE_PAYLOAD_BUFFERS][BLOCK_COUNT * (2 * (NUM_CHANNELS_MAX - 1) + 1)] = {0};
+static uint8_t payload_wr = 0;   // buffer currently being filled
+static uint8_t payload_rd = 0;   // next full buffer to notify
+static uint8_t payload_full = 0; // number of full buffers ready
+volatile int sampleIndex = 0;    // How many samples accumulated in current batch
+volatile bool streaming = false; // True when "START" command is received
+uint8_t mac[6];                  // Array to store 6-byte MAC address
 
 // Flags to start/stop adc_continuous_mode
 static volatile bool adc_start_requested = false;
 static volatile bool adc_stop_requested = false;
 
-
 BLECharacteristic *pDataCharacteristic;
 BLECharacteristic *pControlCharacteristic;
 BLECharacteristic *pBatteryCharacteristic;
 
-
 // Global sample counter (each sample's packet counter)
 uint8_t overallCounter = 0;
 
-
 // Battery monitoring - stores latest ADC reading from A6
-static volatile uint16_t latestBatteryRaw = 2111;  // Initially set to 2111 indicating 100% battery to avoid connection issues
+static volatile uint16_t latestBatteryRaw = 2111; // Initially set to 2111 indicating 100% battery to avoid connection issues
 // Rolling average buffer for battery (1000 samples = 2 seconds @ 500Hz)
 #define BATTERY_AVG_SAMPLES 1000
 static uint16_t batteryBuffer[BATTERY_AVG_SAMPLES] = {0};
 static uint16_t batteryIndex = 0;
-static uint32_t batterySum = 0;  // Initialize with startup value
+static uint32_t batterySum = 0; // Initialize with startup value
 static bool batteryBufferFilled = false;
 
 // ----- ADC DMA (continuous mode) globals -----
@@ -172,19 +164,17 @@ static adc_continuous_handle_t adc_handle = nullptr;
 static bool adc_started = false;
 static SemaphoreHandle_t adc_data_semaphore = nullptr;
 static esp_ble_adv_params_t advParams = {
-  .adv_int_min = 0x0040,
-  .adv_int_max = 0x0050,
-  .adv_type = ADV_TYPE_IND,
-  .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
-  .channel_map = ADV_CHNL_ALL,
-  .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY
-};
+    .adv_int_min = 0x0040,
+    .adv_int_max = 0x0050,
+    .adv_type = ADV_TYPE_IND,
+    .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
+    .channel_map = ADV_CHNL_ALL,
+    .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY};
 
 // Helper macros to parse DMA results as TYPE2 format on C3/C6
 #define ADC_OUTPUT_TYPE ADC_DIGI_OUTPUT_FORMAT_TYPE2
 #define ADC_GET_CHANNEL(p) ((p)->type2.channel)
 #define ADC_GET_DATA(p) ((p)->type2.data)
-
 
 // Forward declarations
 static void adc_dma_init();
@@ -193,25 +183,25 @@ static void adc_dma_stop();
 static void handle_adc_dma_and_notify();
 static inline uint16_t fix_raw_if_needed(uint16_t raw);
 
-
 // ----- BLE Server Callbacks -----
-class MyServerCallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer *pServer) override {
-    pixels.setPixelColor(0, pixels.Color(0, PIXEL_BRIGHTNESS, 0));  // Green
+class MyServerCallbacks : public BLEServerCallbacks
+{
+  void onConnect(BLEServer *pServer) override
+  {
+    pixels.setPixelColor(0, pixels.Color(0, PIXEL_BRIGHTNESS, 0)); // Green
     pixels.show();
     digitalWrite(LED_BUILTIN, HIGH);
     delay(200);
     digitalWrite(LED_BUILTIN, LOW);
 
-
     // Apply -3 dBm to the active connection
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_CONN_HDL0, ESP_PWR_LVL_N3);
-    esp_ble_gap_stop_advertising();  // Explicitly stop advertising
+    esp_ble_gap_stop_advertising(); // Explicitly stop advertising
   }
 
-
-  void onDisconnect(BLEServer *pServer) override {
-    pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red on disconnect
+  void onDisconnect(BLEServer *pServer) override
+  {
+    pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0)); // Red on disconnect
     pixels.show();
     // Vibrate twice on disconnect
     digitalWrite(LED_BUILTIN, HIGH);
@@ -222,67 +212,87 @@ class MyServerCallbacks : public BLEServerCallbacks {
     delay(200);
     digitalWrite(LED_BUILTIN, LOW);
 
-
     streaming = false;
-    adc_stop_requested = true;  // Request stop
+    // Reset payload state on disconnect
+    sampleIndex = 0;
+    payload_wr = 0;
+    payload_rd = 0;
+    payload_full = 0;
+    adc_stop_requested = true; // Request stop
     esp_ble_gap_start_advertising(&advParams);
   }
 };
 
-
 // ----- BLE Control Characteristic Callback -----
 // Handles incoming commands ("START", "STOP", "WHORU", "STATUS")
-class ControlCallback : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic *characteristic) override {
+class ControlCallback : public BLECharacteristicCallbacks
+{
+  void onWrite(BLECharacteristic *characteristic) override
+  {
     String cmd = characteristic->getValue();
     cmd.trim();
     cmd.toUpperCase();
 
-
-    if (cmd == "START") {
-      pixels.setPixelColor(0, pixels.Color(0, 0, PIXEL_BRIGHTNESS));  // Blue
+    if (cmd == "START")
+    {
+      pixels.setPixelColor(0, pixels.Color(0, 0, PIXEL_BRIGHTNESS)); // Blue
       pixels.show();
       overallCounter = 0;
       sampleIndex = 0;
+      payload_wr = 0;
+      payload_rd = 0;
+      payload_full = 0;
       streaming = true;
-      adc_start_requested = true;  // Request start 
-    } else if (cmd == "STOP") {
-      pixels.setPixelColor(0, pixels.Color(0, PIXEL_BRIGHTNESS, 0));  // Green
+      adc_start_requested = true; // Request start
+    }
+    else if (cmd == "STOP")
+    {
+      pixels.setPixelColor(0, pixels.Color(0, PIXEL_BRIGHTNESS, 0)); // Green
       pixels.show();
       streaming = false;
-      adc_stop_requested = true;  // Request stop 
-    } else if (cmd == "WHORU") {
+      adc_stop_requested = true; // Request stop
+    }
+    else if (cmd == "WHORU")
+    {
       characteristic->setValue("NPG-LITE");
       characteristic->notify();
-    } else if (cmd == "STATUS") {
+    }
+    else if (cmd == "STATUS")
+    {
       characteristic->setValue(streaming ? "RUNNING" : "STOPPED");
       characteristic->notify();
-    } else {
+    }
+    else
+    {
       characteristic->setValue("UNKNOWN COMMAND");
       characteristic->notify();
     }
   }
 };
 
-void checkBatteryAndDisconnect() {
-  float voltage = (latestBatteryRaw / 1000.0) * 2;  // for ESP32C6 v0.1
+// -------Battery Functions-------
+
+void checkBatteryAndDisconnect()
+{
+  float voltage = (latestBatteryRaw / 1000.0) * 2; // for ESP32C6 v0.1
   voltage = voltage - 0.02;
   float percentage = interpolatePercentage(voltage);
   // Send battery percentage as single byte (0-100)
   uint8_t batteryByte = (uint8_t)percentage;
   pBatteryCharacteristic->setValue(&batteryByte, 1);
   pBatteryCharacteristic->notify();
-  if(percentage > 50.0)
+  if (percentage > 50.0)
   {
-    pixels.setPixelColor(PIXEL_COUNT-1, pixels.Color(0, PIXEL_BRIGHTNESS, 0));  // Green when above 50%
+    pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(0, PIXEL_BRIGHTNESS, 0)); // Green when above 50%
     pixels.show();
   }
-  else if(percentage <= 50.0 && percentage >= STREAMING_MIN_BATTERY )
+  else if (percentage <= 50.0 && percentage >= STREAMING_MIN_BATTERY)
   {
-    pixels.setPixelColor(PIXEL_COUNT-1, pixels.Color(15, 4, 0));  // Orange when below 50%
+    pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(15, 4, 0)); // Orange when below 50%
     pixels.show();
   }
-  else if (percentage < STREAMING_MIN_BATTERY) {
+  else if (percentage < STREAMING_MIN_BATTERY)
+  {
 
     // Stop streaming
     streaming = false;
@@ -294,83 +304,95 @@ void checkBatteryAndDisconnect() {
     esp_ble_gap_stop_advertising();
 
     // Disconnect BLE client if connected
-    if (pBLEServer != nullptr && pBLEServer->getConnectedCount() > 0) {
+    if (pBLEServer != nullptr && pBLEServer->getConnectedCount() > 0)
+    {
       // Get connection ID from first connected client
       std::map<uint16_t, conn_status_t> peerDevices = pBLEServer->getPeerDevices(false);
-      for (auto const &entry : peerDevices) {
+      for (auto const &entry : peerDevices)
+      {
         uint16_t connId = entry.first;
-        pBLEServer->disconnect(connId);  // Use public disconnect method
+        pBLEServer->disconnect(connId); // Use public disconnect method
       }
     }
     sleepWhenLowBattery();
   }
 }
 
-void sleepWhenLowBattery() {
+void sleepWhenLowBattery()
+{
   // Fader-style slow blink (10 cycles)
-    uint8_t cycles = 0;
-    uint16_t fader = 100;
-    bool decreasing = true;
+  uint8_t cycles = 0;
+  uint16_t fader = 100;
+  bool decreasing = true;
 
-    while (cycles < 10) {
-      pixels.clear();
-      pixels.setPixelColor(PIXEL_COUNT-1, pixels.Color(fader, 0, 0));
-      pixels.show();
-      delay(20);
+  while (cycles < 10)
+  {
+    pixels.clear();
+    pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(fader, 0, 0));
+    pixels.show();
+    delay(20);
 
-      if (decreasing)
+    if (decreasing)
+    {
+      fader = fader - 2;
+      if (fader < 10)
       {
-        fader = fader - 2;
-        if (fader < 10)
-        {
-          decreasing = false;
-        }
-      }
-      else 
-      {
-        fader = fader + 2;
-        if (fader > 100)
-        {
-          decreasing = true;
-          cycles++;
-        }
+        decreasing = false;
       }
     }
-    pixels.clear();
-    pixels.show();
-    esp_deep_sleep_start();  // Enter deep sleep after blinking sequence
+    else
+    {
+      fader = fader + 2;
+      if (fader > 100)
+      {
+        decreasing = true;
+        cycles++;
+      }
+    }
+  }
+  pixels.clear();
+  pixels.show();
+  esp_deep_sleep_start(); // Enter deep sleep after blinking sequence
 }
 
-void checkInitialBattery() {
+void checkInitialBattery()
+{
   float sum = 0.0;
-  for(int i = 0; i < 10; i++)    // Collect battery voltage samples for 10ms
+  for (int i = 0; i < 10; i++) // Collect battery voltage samples for 10ms
   {
     int analogValue = analogRead(BATTERY_PIN);
-    float voltage = (analogValue/1000.0) * 2;  // for ESP32C6 v0.1
+    float voltage = (analogValue / 1000.0) * 2; // for ESP32C6 v0.1
     voltage = voltage - 0.02;
     sum += voltage;
     delay(1);
   }
-  float initialBatteryVoltage = sum / 10.0;  // Average voltage
-  float initialBatteryPercentage = interpolatePercentage(initialBatteryVoltage);  // Calculate battery percentage from LUT
+  float initialBatteryVoltage = sum / 10.0;                                      // Average voltage
+  float initialBatteryPercentage = interpolatePercentage(initialBatteryVoltage); // Calculate battery percentage from LUT
 
   // If battery is low, slowly blink the neopixel
-  if(initialBatteryPercentage< BOOT_MIN_BATTERY)
+  if (initialBatteryPercentage < BOOT_MIN_BATTERY)
   {
     sleepWhenLowBattery();
   }
 }
 
-void checkChannelCount() {
+// --------Check for Playmate-------
+
+void checkChannelCount()
+{
   isBeastPlaymate = false;
-  // Check for Beast Playmate (6 channels)     
+  // Check for Beast Playmate (6 channels)
   pinMode(A3, INPUT_PULLUP);
   pinMode(A4, INPUT_PULLUP);
   pinMode(A5, INPUT_PULLUP);
-  for (int i = 0; i < 10; i++) {    // Collect samples for 10ms
-    if (digitalRead(A3) == LOW) isBeastPlaymate = true;
-    if (digitalRead(A4) == LOW) isBeastPlaymate = true;
-    if (digitalRead(A5) == LOW) isBeastPlaymate = true;
+  for (int i = 0; i < 10; i++)
+  { // Collect samples for 10ms
+    if (digitalRead(A3) == LOW)
+      isBeastPlaymate = true;
+    if (digitalRead(A4) == LOW)
+      isBeastPlaymate = true;
+    if (digitalRead(A5) == LOW)
+      isBeastPlaymate = true;
     delay(1);
   }
   // Restore high-impedance inputs before ADC use
@@ -378,14 +400,15 @@ void checkChannelCount() {
   pinMode(A4, INPUT);
   pinMode(A5, INPUT);
   // Configure active channels and packet sizes
-  if(isBeastPlaymate)
+  if (isBeastPlaymate)
     NUM_CHANNELS = 7;
   else
     NUM_CHANNELS = 4;
   recomputePacketSizes();
 }
 
-void setup() {
+void setup()
+{
   // ----- LEDs -----
   pixels.begin();
 
@@ -394,17 +417,19 @@ void setup() {
 
   setCpuFrequencyMhz(80);
 
-  checkChannelCount();   // Check for Beast Playmate
+  checkChannelCount(); // Check for Beast Playmate
 
-  checkInitialBattery();  // Check initial battery status
+  checkInitialBattery(); // Check initial battery status
 
-  pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0));  // Red (power on)
+  pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0)); // Red (power on)
   pixels.show();
 
   // Create binary semaphore for ADC data ready signaling
   adc_data_semaphore = xSemaphoreCreateBinary();
-  if (adc_data_semaphore == nullptr) {
-    while (1);  // Halt
+  if (adc_data_semaphore == nullptr)
+  {
+    while (1)
+      ; // Halt
   }
 
   esp_read_mac(mac, ESP_MAC_EFUSE_FACTORY);
@@ -414,12 +439,11 @@ void setup() {
 
   // ----- Initialize BLE -----
   char deviceName[36];
-  if(isBeastPlaymate)
+  if (isBeastPlaymate)
     sprintf(deviceName, "NPG-Lite-6CH:%02X:%02X", mac[4], mac[5]);
   else
     sprintf(deviceName, "NPG-Lite-3CH:%02X:%02X", mac[4], mac[5]);
   BLEDevice::init(deviceName);
-
 
   // Set BLE TX power to -3 dBm for default/advertising/scan
   esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_N3);
@@ -435,20 +459,20 @@ void setup() {
 
   // Data Characteristic (Notify only) for ADC data
   pDataCharacteristic = pService->createCharacteristic(
-    DATA_CHAR_UUID,
-    BLECharacteristic::PROPERTY_NOTIFY);
+      DATA_CHAR_UUID,
+      BLECharacteristic::PROPERTY_NOTIFY);
   pDataCharacteristic->addDescriptor(new BLE2902());
 
   // Control Characteristic (Read/Write/Notify)
   pControlCharacteristic = pService->createCharacteristic(
-    CONTROL_CHAR_UUID,
-    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+      CONTROL_CHAR_UUID,
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
   pControlCharacteristic->setCallbacks(new ControlCallback());
 
   // Battery Characteristic (Read/Notify)
   pBatteryCharacteristic = pService->createCharacteristic(
-    BATTERY_CHAR_UUID,
-    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+      BATTERY_CHAR_UUID,
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   pBatteryCharacteristic->addDescriptor(new BLE2902());
 
   pService->start();
@@ -456,7 +480,7 @@ void setup() {
   // Configure advertising data to include device name
   esp_ble_adv_data_t adv_data = {};
   adv_data.set_scan_rsp = false;
-  adv_data.include_name = true;  
+  adv_data.include_name = true;
   adv_data.include_txpower = false;
   adv_data.min_interval = 0x0006;
   adv_data.max_interval = 0x0010;
@@ -471,125 +495,133 @@ void setup() {
 
   esp_ble_gap_config_adv_data(&adv_data);
 
-
   // Stop Arduino's advertising helper and start with our params
-  BLEDevice::getAdvertising()->stop();  // if it was started elsewhere
+  BLEDevice::getAdvertising()->stop(); // if it was started elsewhere
   esp_ble_gap_start_advertising(&advParams);
-
 }
 
-void loop() {
+void loop()
+{
   // Handle start/stop requests of adc_continuous_mode
-  if (adc_start_requested) {
+  if (adc_start_requested)
+  {
     adc_dma_start();
     adc_start_requested = false;
   }
-  if (adc_stop_requested) {
+  if (adc_stop_requested)
+  {
     adc_dma_stop();
     adc_stop_requested = false;
   }
 
-  if (streaming) {
+  if (streaming)
+  {
     // Battery check only when streaming (every 10 seconds)
     unsigned long currentMillis = millis();
-    if (currentMillis - lastBatteryCheck >= BATTERY_CHECK_INTERVAL) {
+    if (currentMillis - lastBatteryCheck >= BATTERY_CHECK_INTERVAL)
+    {
       lastBatteryCheck = currentMillis;
       checkBatteryAndDisconnect();
     }
 
     // Block until semaphore is given by ISR (allows deep sleep)
-    if (xSemaphoreTake(adc_data_semaphore, portMAX_DELAY) == pdTRUE) {
+    if (xSemaphoreTake(adc_data_semaphore, portMAX_DELAY) == pdTRUE)
+    {
       handle_adc_dma_and_notify();
     }
-  } else {
+  }
+  else
+  {
     // Longer delay when idle to maximize sleep time
     delay(100);
   }
 }
-
 
 // ====== ADC DMA implementation ======
 
 // Maps physical ADC channel id → logical index 0..NUM_CHANNELS-1
 static int8_t hw2idx[10];
 
-static const uint8_t hw_chs_4[4] = { 0, 1, 2, 6 };   // Configuration for 3 BioAmp Channels
-static const uint8_t hw_chs_7[7] = { 0, 1, 2, 3, 4, 5, 6 };  // Configuration for 6 BioAmp Channels
+static const uint8_t hw_chs_4[4] = {0, 1, 2, 6};          // Configuration for 3 BioAmp Channels
+static const uint8_t hw_chs_7[7] = {0, 1, 2, 3, 4, 5, 6}; // Configuration for 6 BioAmp Channels
 
-static void adc_dma_init() {
+static void adc_dma_init()
+{
 
   static adc_digi_pattern_config_t pattern[NUM_CHANNELS_MAX];
-  const uint8_t *hw_chs = (NUM_CHANNELS == 7) ? hw_chs_7 : hw_chs_4;  // Use appropriate channel configuration
+  const uint8_t *hw_chs = (NUM_CHANNELS == 7) ? hw_chs_7 : hw_chs_4; // Use appropriate channel configuration
 
   // Build pattern from the single channel list
-  for (int i = 0; i < NUM_CHANNELS; i++) {
+  for (int i = 0; i < NUM_CHANNELS; i++)
+  {
     pattern[i].atten = ADC_ATTEN_DB_11;
-    pattern[i].channel = hw_chs[i];  // Use physical channel id
-    pattern[i].unit = ADC_UNIT_1;  
+    pattern[i].channel = hw_chs[i]; // Use physical channel id
+    pattern[i].unit = ADC_UNIT_1;
     pattern[i].bit_width = ADC_BITWIDTH_12;
   }
 
-
-  for (int i = 0; i < (int)sizeof(hw2idx); i++) hw2idx[i] = -1;
-  for (int i = 0; i < NUM_CHANNELS; i++) hw2idx[hw_chs[i]] = i;
-
+  for (int i = 0; i < (int)sizeof(hw2idx); i++)
+    hw2idx[i] = -1;
+  for (int i = 0; i < NUM_CHANNELS; i++)
+    hw2idx[hw_chs[i]] = i;
 
   // Create driver handle and configure continuous conversion
   adc_continuous_handle_cfg_t handle_cfg = {
-    .max_store_buf_size = NUM_CHANNELS * ADC_CONV_BYTES * BLOCK_COUNT * 5,
-    .conv_frame_size = NUM_CHANNELS * ADC_CONV_BYTES * BLOCK_COUNT,
+      .max_store_buf_size = NUM_CHANNELS * SOC_ADC_DIGI_RESULT_BYTES * BLOCK_COUNT * 5,
+      .conv_frame_size = NUM_CHANNELS * SOC_ADC_DIGI_RESULT_BYTES * BLOCK_COUNT,
 #if defined(ESP_IDF_VERSION) && (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 0))
-    .flags = { .flush_pool = 1 },  // Only for newer IDF that supports it
+      .flags = {.flush_pool = 1}, // Only for newer IDF that supports it
 #endif
   };
-  if (adc_handle == nullptr) {
+  if (adc_handle == nullptr)
+  {
     ESP_ERROR_CHECK(adc_continuous_new_handle(&handle_cfg, &adc_handle));
   }
 
-
   adc_continuous_evt_cbs_t cbs = {
-    .on_conv_done = [](adc_continuous_handle_t handle,
-                       const adc_continuous_evt_data_t *edata,
-                       void *user_data) -> bool {
-      BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-      xSemaphoreGiveFromISR(adc_data_semaphore, &xHigherPriorityTaskWoken);
-      return (xHigherPriorityTaskWoken == pdTRUE);  // Yield if higher priority task woken
-    },
+      .on_conv_done = [](adc_continuous_handle_t handle,
+                         const adc_continuous_evt_data_t *edata,
+                         void *user_data) -> bool
+      {
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        xSemaphoreGiveFromISR(adc_data_semaphore, &xHigherPriorityTaskWoken);
+        return (xHigherPriorityTaskWoken == pdTRUE); // Yield if higher priority task woken
+      },
   };
   ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(adc_handle, &cbs, nullptr));
 
-
   adc_continuous_config_t dig_cfg = {
-    .pattern_num = NUM_CHANNELS,
-    .adc_pattern = pattern,
-    // total sample rate = per-channel * number of channels
-    .sample_freq_hz = (uint32_t)(SAMP_RATE * NUM_CHANNELS),  // 2000 SPS total
-    .conv_mode = ADC_CONV_SINGLE_UNIT_1,
-    .format = ADC_OUTPUT_TYPE,  // TYPE2 (unit, channel, data)
+      .pattern_num = NUM_CHANNELS,
+      .adc_pattern = pattern,
+      // total sample rate = per-channel * number of channels
+      .sample_freq_hz = (uint32_t)(SAMP_RATE * NUM_CHANNELS), // 2000 SPS total
+      .conv_mode = ADC_CONV_SINGLE_UNIT_1,
+      .format = ADC_OUTPUT_TYPE, // TYPE2 (unit, channel, data)
   };
   ESP_ERROR_CHECK(adc_continuous_config(adc_handle, &dig_cfg));
 }
 
-
-static void adc_dma_start() {
+static void adc_dma_start()
+{
   // Reinitialize ADC if it was deinited
-  if (adc_handle == nullptr) {
+  if (adc_handle == nullptr)
+  {
     adc_dma_init();
   }
 
-
-  if (adc_handle && !adc_started) {
+  if (adc_handle && !adc_started)
+  {
     ESP_ERROR_CHECK(adc_continuous_start(adc_handle));
     adc_started = true;
   }
 }
 
-
-static void adc_dma_stop() {
-  if (adc_handle && adc_started) {
+static void adc_dma_stop()
+{
+  if (adc_handle && adc_started)
+  {
     ESP_ERROR_CHECK(adc_continuous_stop(adc_handle));
     adc_started = false;
-
 
     // DEINITIALIZE ADC to save power
     ESP_ERROR_CHECK(adc_continuous_deinit(adc_handle));
@@ -597,109 +629,149 @@ static void adc_dma_stop() {
   }
 }
 
-
-static inline uint16_t fix_raw_if_needed(uint16_t raw) {
+static inline uint16_t fix_raw_if_needed(uint16_t raw)
+{
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
   // Optional: match your prior scaling workaround for C6 rev1 if needed
-  if (chiprev == 1) {
+  if (chiprev == 1)
+  {
     // scale raw (0..~3249) to 0..4095
     uint32_t v = (uint32_t)raw * 4095u / 3249u;
-    if (v > 4095u) v = 4095u;
+    if (v > 4095u)
+      v = 4095u;
     return (uint16_t)v;
   }
 #endif
   return raw;
 }
 
-
-static void handle_adc_dma_and_notify() {
-  // Read whatever DMA has buffered; non-blocking with short buffer
-  uint8_t dma_buf[NUM_CHANNELS_MAX * ADC_CONV_BYTES * BLOCK_COUNT];
-  uint32_t ret_len = 0;
-  esp_err_t ret = adc_continuous_read(adc_handle, dma_buf, sizeof(dma_buf), &ret_len, 0);
-  if (ret != ESP_OK || ret_len == 0) {
-    return;
-  }
-
-
+static void handle_adc_dma_and_notify()
+{
   // Assemble Channel data into sample packets
-  static uint16_t last_vals[NUM_CHANNELS_MAX] = { 0 };
+  static uint16_t last_vals[NUM_CHANNELS_MAX] = {0};
   static uint8_t have_mask = 0;
   const uint8_t FULL_MASK = (1u << NUM_CHANNELS) - 1;
 
+  // Drain ADC driver until empty OR until our payload buffers are full
+  while (payload_full < BLE_PAYLOAD_BUFFERS)
+  {
+    // Read whatever DMA has buffered
+    uint8_t dma_buf[NUM_CHANNELS_MAX * SOC_ADC_DIGI_RESULT_BYTES * BLOCK_COUNT];
+    uint32_t ret_len = 0;
 
-  for (uint32_t i = 0; i + ADC_CONV_BYTES <= ret_len; i += ADC_CONV_BYTES) {
-    auto *p = (const adc_digi_output_data_t *)&dma_buf[i];
-    uint8_t ch_hw = ADC_GET_CHANNEL(p);  // physical channel id from TYPE2
-    uint16_t raw = ADC_GET_DATA(p);
-    // map physical channel → logical index (0..NUM_CHANNELS-1)
-    int8_t idx = (ch_hw < (uint8_t)sizeof(hw2idx)) ? hw2idx[ch_hw] : -1;
-    if (idx >= 0 && idx < (int8_t)NUM_CHANNELS) {
-      // Apply fix only to BioAmp channels (A0-A5), NOT battery (A6)
-      if (idx < (NUM_CHANNELS-1)) {
-        last_vals[idx] = fix_raw_if_needed(raw);
-      } else {
-        last_vals[idx] = raw;  // Battery channel: use raw value
-      }
-      have_mask |= (1u << idx);
-
-
-      // Store battery reading with rolling average
-      if (idx == (NUM_CHANNELS-1)) {
-        uint16_t newSample = last_vals[idx];
-        
-        // Subtract oldest value from sum
-        batterySum -= batteryBuffer[batteryIndex];
-        
-        // Add new value to buffer and sum
-        batteryBuffer[batteryIndex] = newSample;
-        batterySum += newSample;
-        
-        // Update circular buffer index
-        batteryIndex++;
-        if (batteryIndex >= BATTERY_AVG_SAMPLES) {
-          batteryIndex = 0;
-          batteryBufferFilled = true;  // Buffer is now full
-        }
-        
-        // Calculate and store average (only after buffer is filled for accuracy)
-        if (batteryBufferFilled) {
-          latestBatteryRaw = (uint16_t)(batterySum / BATTERY_AVG_SAMPLES);
-        } else {
-          // Before buffer fills, use current value (or could use partial average)
-          latestBatteryRaw = newSample;
-        }
-      }
+    esp_err_t ret = adc_continuous_read(adc_handle, dma_buf, sizeof(dma_buf), &ret_len, 0);
+    if (ret != ESP_OK || ret_len == 0)
+    {
+      return;
     }
 
-    // When we have all channels, emit one record DIRECTLY to batchBuffer
-    if (have_mask == FULL_MASK) {
-      // Calculate offset in batchBuffer
-      uint16_t offset = sampleIndex * SINGLE_SAMPLE_LEN;
+    for (uint32_t i = 0; i + SOC_ADC_DIGI_RESULT_BYTES <= ret_len; i += SOC_ADC_DIGI_RESULT_BYTES)
+    {
+      auto *p = (const adc_digi_output_data_t *)&dma_buf[i];
+      uint8_t ch_hw = ADC_GET_CHANNEL(p); // physical channel id from TYPE2
+      uint16_t raw = ADC_GET_DATA(p);
 
-      // Write counter directly to batchBuffer
-      batchBuffer[offset] = overallCounter;
-      overallCounter = (overallCounter + 1) & 0xFF;
+      // map physical channel → logical index (0..NUM_CHANNELS-1)
+      int8_t idx = (ch_hw < (uint8_t)sizeof(hw2idx)) ? hw2idx[ch_hw] : -1;
+      if (idx >= 0 && idx < (int8_t)NUM_CHANNELS)
+      {
+        // Apply fix only to BioAmp channels (A0-A5), NOT battery (A6)
+        if (idx < (NUM_CHANNELS - 1))
+        {
+          last_vals[idx] = fix_raw_if_needed(raw);
+        }
+        else
+        {
+          last_vals[idx] = raw; // Battery channel: use raw value
+        }
+        have_mask |= (1u << idx);
 
+        // Store battery reading with rolling average
+        if (idx == (NUM_CHANNELS - 1))
+        {
+          uint16_t newSample = last_vals[idx];
 
-      // Big-endian packing directly to batchBuffer (no intermediate samplePacket)
-      for (uint8_t c = 0; c < NUM_CHANNELS - 1; c++) {
-        uint16_t v = last_vals[c];
-        batchBuffer[offset + 1 + c * 2] = (uint8_t)((v >> 8) & 0xFF);
-        batchBuffer[offset + 1 + c * 2 + 1] = (uint8_t)(v & 0xFF);
+          // Subtract oldest value from sum and add new value to buffer and sum
+          batterySum -= batteryBuffer[batteryIndex];
+          batteryBuffer[batteryIndex] = newSample;
+          batterySum += newSample;
+
+          // Update circular buffer index
+          batteryIndex++;
+          if (batteryIndex >= BATTERY_AVG_SAMPLES)
+          {
+            batteryIndex = 0;
+            batteryBufferFilled = true; // Buffer is now full
+          }
+
+          // Calculate and store average (only after buffer is filled for accuracy)
+          if (batteryBufferFilled)
+          {
+            latestBatteryRaw = (uint16_t)(batterySum / BATTERY_AVG_SAMPLES);
+          }
+          else
+          {
+            // Before buffer fills, use current value (or could use partial average)
+            latestBatteryRaw = newSample;
+          }
+        }
       }
 
-      sampleIndex++;
+      // When we have all channels, emit one record into current payload buffer
+      if (have_mask == FULL_MASK)
+      {
+        // If all payload buffers are full, stop reading
+        if (payload_full >= BLE_PAYLOAD_BUFFERS)
+        {
+          have_mask = 0;
+          break;
+        }
 
-      // Notify every BLOCK_COUNT samples
-      if (sampleIndex >= BLOCK_COUNT) {
-        pDataCharacteristic->setValue(batchBuffer, NEW_PACKET_LEN);
-        pDataCharacteristic->notify();
-        sampleIndex = 0;
+        // Calculate offset in blePayload buffer
+        uint16_t offset = sampleIndex * SINGLE_SAMPLE_LEN;
+
+        // Write counter directly to blePayload buffer
+        blePayload[payload_wr][offset] = overallCounter;
+        overallCounter = (overallCounter + 1) & 0xFF;
+
+        // Big-endian packing directly to blePayload buffer
+        for (uint8_t c = 0; c < NUM_CHANNELS - 1; c++)
+        {
+          uint16_t v = last_vals[c];
+          blePayload[payload_wr][offset + 1 + c * 2] = (uint8_t)((v >> 8) & 0xFF);
+          blePayload[payload_wr][offset + 1 + c * 2 + 1] = (uint8_t)(v & 0xFF);
+        }
+
+        sampleIndex++;
+
+        // Notify every BLOCK_COUNT samples
+        if (sampleIndex >= BLOCK_COUNT)
+        {
+          sampleIndex = 0;
+          payload_full++;
+          payload_wr = (payload_wr + 1) % BLE_PAYLOAD_BUFFERS;
+
+          // If all payload buffers are full, stop reading
+          if (payload_full >= BLE_PAYLOAD_BUFFERS)
+          {
+            have_mask = 0;
+            break;
+          }
+
+          // pDataCharacteristic->setValue(batchBuffer, NEW_PACKET_LEN);
+          // pDataCharacteristic->notify();
+        }
+
+        have_mask = 0; // reset for next triplet
       }
+    }
+    while (payload_full > 0 && streaming)
+    {
+      pDataCharacteristic->setValue(blePayload[payload_rd], NEW_PACKET_LEN);
+      pDataCharacteristic->notify();
 
-
-      have_mask = 0;  // reset for next triplet
+      payload_rd = (uint8_t)((payload_rd + 1) % BLE_PAYLOAD_BUFFERS);
+      payload_full--;
     }
   }
 }
