@@ -274,12 +274,12 @@ void checkBatteryAndDisconnect() {
   pBatteryCharacteristic->notify();
   if(percentage > 50.0)
   {
-    pixels.setPixelColor(5, pixels.Color(0, PIXEL_BRIGHTNESS, 0));  // Green when above 50%
+    pixels.setPixelColor(PIXEL_COUNT-1, pixels.Color(0, PIXEL_BRIGHTNESS, 0));  // Green when above 50%
     pixels.show();
   }
   else if(percentage <= 50.0 && percentage >= 5.0 )
   {
-    pixels.setPixelColor(5, pixels.Color(15, 4, 0));  // Orange when below 50%
+    pixels.setPixelColor(PIXEL_COUNT-1, pixels.Color(15, 4, 0));  // Orange when below 50%
     pixels.show();
   }
   else if (percentage < STREAMING_MIN_BATTERY) {
@@ -308,7 +308,7 @@ void sleepWhenLowBattery() {
 
     while (cycles < 10) {
       pixels.clear();
-      pixels.setPixelColor(5, pixels.Color(fader, 0, 0));
+      pixels.setPixelColor(PIXEL_COUNT-1, pixels.Color(fader, 0, 0));
       pixels.show();
       delay(20);
 
@@ -339,7 +339,7 @@ void checkInitialBattery() {
   float sum = 0.0;
   for(int i = 0; i < 10; i++)    // Collect battery voltage samples for 10ms
   {
-    int analogValue = analogRead(A6);
+    int analogValue = analogRead(BATTERY_PIN);
     float voltage = (analogValue/1000.0) * 2;  // for ESP32C6 v0.1
     voltage = voltage - 0.02;
     sum += voltage;
