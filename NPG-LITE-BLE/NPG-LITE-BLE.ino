@@ -356,6 +356,7 @@ void checkInitialBattery() {
 }
 
 void checkChannelCount() {
+  isBeastPlaymate = false;
   // Check for Beast Playmate (6 channels)     
   pinMode(A3, INPUT_PULLUP);
   pinMode(A4, INPUT_PULLUP);
@@ -366,6 +367,10 @@ void checkChannelCount() {
     if (digitalRead(A5) == LOW) isBeastPlaymate = true;
     delay(1);
   }
+  // Restore high-impedance inputs before ADC use
+  pinMode(A3, INPUT);
+  pinMode(A4, INPUT);
+  pinMode(A5, INPUT);
   // Configure active channels and packet sizes
   if(isBeastPlaymate)
     NUM_CHANNELS = 7;
