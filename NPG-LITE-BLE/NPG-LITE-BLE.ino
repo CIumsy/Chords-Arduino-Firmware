@@ -277,15 +277,21 @@ void checkBatteryAndDisconnect() {
     pixels.setPixelColor(PIXEL_COUNT-1, pixels.Color(0, PIXEL_BRIGHTNESS, 0));  // Green when above 50%
     pixels.show();
   }
-  else if(percentage <= 50.0 && percentage >= 5.0 )
+  else if(percentage <= 50.0 && percentage >= STREAMING_MIN_BATTERY )
   {
     pixels.setPixelColor(PIXEL_COUNT-1, pixels.Color(15, 4, 0));  // Orange when below 50%
     pixels.show();
   }
   else if (percentage < STREAMING_MIN_BATTERY) {
+
     // Stop streaming
     streaming = false;
-    adc_stop_requested = true;  // Request stop
+
+    // Stop ADC since loop() won't run again before deep sleep
+    adc_dma_stop();
+
+    // Stop advertising to save power while blinking before deep sleep
+    esp_ble_gap_stop_advertising();
 
     // Disconnect BLE client if connected
     if (pBLEServer != nullptr && pBLEServer->getConnectedCount() > 0) {
