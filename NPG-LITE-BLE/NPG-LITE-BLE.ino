@@ -135,7 +135,7 @@ uint8_t blePayload[BLE_PAYLOAD_BUFFERS][BLOCK_COUNT * (2 * (NUM_CHANNELS_MAX - 1
 static uint8_t payload_wr = 0;   // buffer currently being filled
 static uint8_t payload_rd = 0;   // next full buffer to notify
 static uint8_t payload_full = 0; // number of full buffers ready
-volatile int sampleIndex = 0;    // How many samples accumulated in current batch
+static uint8_t sampleIndex = 0;    // How many samples accumulated in current batch
 volatile bool streaming = false; // True when "START" command is received
 uint8_t mac[6];                  // Array to store 6-byte MAC address
 
@@ -151,7 +151,7 @@ BLECharacteristic *pBatteryCharacteristic;
 uint8_t overallCounter = 0;
 
 // Battery monitoring - stores latest ADC reading from A6
-static volatile uint16_t latestBatteryRaw = 2111; // Initially set to 2111 indicating 100% battery to avoid connection issues
+static volatile uint16_t latestBatteryRaw = 0; // Initially set to 2111 indicating 100% battery to avoid connection issues
 // Rolling average buffer for battery (2000 samples = 4 seconds @ 500Hz)
 #define BATTERY_AVG_SAMPLES 2000
 static uint16_t batteryBuffer[BATTERY_AVG_SAMPLES] = {0};
@@ -357,16 +357,22 @@ void sleepWhenLowBattery()
 
 void checkInitialBattery()
 {
+  int count = 0;
   float sum = 0.0;
-  for (int i = 0; i < 10; i++) // Collect battery voltage samples for 10ms
+  unsigned long startMillis = millis();
+  while (millis() - startMillis < 100) // Collect battery voltage samples for 100ms
   {
     int analogValue = analogRead(BATTERY_PIN);
     float voltage = (analogValue / 1000.0) * 2; // for ESP32C6 v0.1
     voltage = voltage - 0.02;
     sum += voltage;
-    delay(1);
+    count++;
   }
-  float initialBatteryVoltage = sum / 10.0;                                      // Average voltage
+  // Avoid divide-by-zero (shouldn't happen, but keeps it safe)
+  if (count == 0)
+    return;
+
+  float initialBatteryVoltage = sum / count;                                      // Average voltage
   float initialBatteryPercentage = interpolatePercentage(initialBatteryVoltage); // Calculate battery percentage from LUT
 
   // If battery is low, slowly blink the neopixel
@@ -649,20 +655,20 @@ static void handle_adc_dma_and_notify()
 {
   // Assemble Channel data into sample packets
   static uint16_t last_vals[NUM_CHANNELS_MAX] = {0};
-  static uint8_t have_mask = 0;
-  const uint8_t FULL_MASK = (1u << NUM_CHANNELS) - 1;
+  static uint32_t have_mask = 0;
+  const uint32_t FULL_MASK = (1u << NUM_CHANNELS) - 1;
+  uint8_t dma_buf[NUM_CHANNELS_MAX * SOC_ADC_DIGI_RESULT_BYTES * BLOCK_COUNT];
 
   // Drain ADC driver until empty OR until our payload buffers are full
   while (payload_full < BLE_PAYLOAD_BUFFERS)
   {
     // Read whatever DMA has buffered
-    uint8_t dma_buf[NUM_CHANNELS_MAX * SOC_ADC_DIGI_RESULT_BYTES * BLOCK_COUNT];
     uint32_t ret_len = 0;
 
     esp_err_t ret = adc_continuous_read(adc_handle, dma_buf, sizeof(dma_buf), &ret_len, 0);
     if (ret != ESP_OK || ret_len == 0)
     {
-      return;
+      break;
     }
 
     for (uint32_t i = 0; i + SOC_ADC_DIGI_RESULT_BYTES <= ret_len; i += SOC_ADC_DIGI_RESULT_BYTES)
@@ -744,7 +750,6 @@ static void handle_adc_dma_and_notify()
 
         sampleIndex++;
 
-        // Notify every BLOCK_COUNT samples
         if (sampleIndex >= BLOCK_COUNT)
         {
           sampleIndex = 0;
@@ -757,21 +762,18 @@ static void handle_adc_dma_and_notify()
             have_mask = 0;
             break;
           }
-
-          // pDataCharacteristic->setValue(batchBuffer, NEW_PACKET_LEN);
-          // pDataCharacteristic->notify();
         }
 
         have_mask = 0; // reset for next triplet
       }
     }
-    while (payload_full > 0 && streaming)
-    {
-      pDataCharacteristic->setValue(blePayload[payload_rd], NEW_PACKET_LEN);
-      pDataCharacteristic->notify();
+  }
+  while (payload_full > 0 && streaming)
+  {
+    pDataCharacteristic->setValue(blePayload[payload_rd], NEW_PACKET_LEN);
+    pDataCharacteristic->notify();
 
-      payload_rd = (uint8_t)((payload_rd + 1) % BLE_PAYLOAD_BUFFERS);
-      payload_full--;
-    }
+    payload_rd = (uint8_t)((payload_rd + 1) % BLE_PAYLOAD_BUFFERS);
+    payload_full--;
   }
 }
