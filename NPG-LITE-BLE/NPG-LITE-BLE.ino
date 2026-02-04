@@ -90,7 +90,7 @@ Adafruit_NeoPixel pixels(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 // Battery monitoring variables
 static unsigned long lastBatteryCheck = 0;
-static const unsigned long BATTERY_CHECK_INTERVAL = 5000; // Interval in milliseconds
+static const unsigned long BATTERY_CHECK_INTERVAL = 10000; // Interval in milliseconds
 static BLEServer *pBLEServer = nullptr;                    // Store server reference for disconnect
 
 // LUT for 1S LiPo (Voltage in ascending order)
@@ -152,12 +152,14 @@ uint8_t overallCounter = 0;
 
 // Battery monitoring - stores latest ADC reading from A6
 static volatile uint16_t latestBatteryRaw = 0; 
-// Rolling average buffer for battery (2000 samples = 4 seconds @ 500Hz)
-#define BATTERY_AVG_SAMPLES 2000
-static uint16_t batteryBuffer[BATTERY_AVG_SAMPLES] = {0};
-static uint16_t batteryIndex = 0;
-static uint32_t batterySum = 0; // Initialize with startup value
-static bool batteryBufferFilled = false;
+
+// Battery averaging: log one battery ADC value per completed data packet,
+// compute an average over BATTERY_CHECK_INTERVAL, and maintain a decreasing-only
+static uint32_t batteryWinStartMs = 0;
+static uint32_t batteryWinSum = 0;
+static uint16_t batteryWinCount = 0;
+static uint16_t batteryAvgToSend = 0; // 0 when not ready yet
+static uint16_t isCharging = 0; // 0 when not charging
 
 // ----- ADC DMA (continuous mode) globals -----
 static adc_continuous_handle_t adc_handle = nullptr;
@@ -274,17 +276,16 @@ class ControlCallback : public BLECharacteristicCallbacks
 
 void checkBatteryAndDisconnect()
 {
-  float voltage = (latestBatteryRaw / 1000.0) * 2; // for ESP32C6 v0.1
+  if (batteryAvgToSend == 0)
+    return;
+
+  float voltage = (batteryAvgToSend / 1000.0) * 2; // for ESP32C6 v0.1
   voltage = voltage - 0.02;
-  float percentage = floor(interpolatePercentage(voltage));
+  float percentage = ceil(interpolatePercentage(voltage));
   // Send battery percentage as single byte (0-100)
   uint8_t batteryByte = (uint8_t)percentage;
-  if(batteryBufferFilled)
-  {
-    pBatteryCharacteristic->setValue(&batteryByte, 1);
-    pBatteryCharacteristic->notify();
-  }
-  else return;
+  pBatteryCharacteristic->setValue(&batteryByte, 1);
+  pBatteryCharacteristic->notify();
   if (percentage > 50.0)
   {
     pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(0, PIXEL_BRIGHTNESS, 0)); // Green when above 50%
@@ -375,10 +376,9 @@ void checkInitialBattery()
     return;
 
   float initialBatteryRaw = sum / count;
-  latestBatteryRaw = initialBatteryRaw;
   float voltage = (initialBatteryRaw / 1000.0) * 2; // for ESP32C6 v0.1
   voltage = voltage - 0.02;
-  float initialBatteryPercentage = floor(interpolatePercentage(voltage)); // Calculate battery percentage from LUT
+  float initialBatteryPercentage = ceil(interpolatePercentage(voltage)); // Calculate battery percentage from LUT
 
   // If battery is low, slowly blink the neopixel
   if (initialBatteryPercentage < BOOT_MIN_BATTERY)
@@ -432,11 +432,18 @@ void setup()
 
   checkInitialBattery(); // Check initial battery status
 
+  // Initialize battery window variables
+  batteryWinStartMs = millis();
+  batteryWinSum = 0;
+  batteryWinCount = 0;
+  batteryAvgToSend = 0;
+
   pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0)); // Red (power on)
   pixels.show();
 
   // Create binary semaphore for ADC data ready signaling
   adc_data_semaphore = xSemaphoreCreateBinary();
+
   if (adc_data_semaphore == nullptr)
   {
     while (1)
@@ -527,7 +534,7 @@ void loop()
 
   if (streaming)
   {
-    // Battery check only when streaming (every 10 seconds)
+    // Battery check only when streaming (every battery check interval)
     unsigned long currentMillis = millis();
     if (currentMillis - lastBatteryCheck >= BATTERY_CHECK_INTERVAL)
     {
@@ -544,6 +551,11 @@ void loop()
   else
   {
     // Longer delay when idle to maximize sleep time
+    // Reset battery window/latch on streaming start
+    batteryWinStartMs = millis();
+    batteryWinSum = 0;
+    batteryWinCount = 0;
+    batteryAvgToSend = 0;
     delay(100);
   }
 }
@@ -697,34 +709,10 @@ static void handle_adc_dma_and_notify()
         }
         have_mask |= (1u << idx);
 
-        // Store battery reading with rolling average
+        // Track latest battery raw for reference/debug (averaging happens per completed packet)
         if (idx == (NUM_CHANNELS - 1))
         {
-          uint16_t newSample = last_vals[idx];
-
-          // Subtract oldest value from sum and add new value to buffer and sum
-          batterySum -= batteryBuffer[batteryIndex];
-          batteryBuffer[batteryIndex] = newSample;
-          batterySum += newSample;
-
-          // Update circular buffer index
-          batteryIndex++;
-          if (batteryIndex >= BATTERY_AVG_SAMPLES)
-          {
-            batteryIndex = 0;
-            batteryBufferFilled = true; // Buffer is now full
-          }
-
-          // Calculate and store average (only after buffer is filled for accuracy)
-          if (batteryBufferFilled)
-          {
-            latestBatteryRaw = (uint16_t)(batterySum / BATTERY_AVG_SAMPLES);
-          }
-          else
-          {
-            // Before buffer fills, use current value (or could use partial average)
-            latestBatteryRaw = newSample;
-          }
+          latestBatteryRaw = last_vals[idx];
         }
       }
 
@@ -758,6 +746,48 @@ static void handle_adc_dma_and_notify()
         if (sampleIndex >= BLOCK_COUNT)
         {
           sampleIndex = 0;
+
+          // Log one battery ADC value per completed packet
+          if (NUM_CHANNELS > 0)
+          {
+            uint16_t batt = last_vals[NUM_CHANNELS - 1];
+            batteryWinSum += batt;
+            batteryWinCount++;
+          }
+
+          // Every BATTERY_CHECK_INTERVAL, compute window average and update latch (decreasing-only)
+          uint32_t nowMs = millis();
+          if ((uint32_t)(nowMs - batteryWinStartMs) >= (uint32_t)BATTERY_CHECK_INTERVAL)
+          {
+            if (batteryWinCount > 0)
+            {
+              uint16_t currentAvg = (uint16_t)(batteryWinSum / batteryWinCount);
+              if (batteryAvgToSend == 0)
+              {
+                batteryAvgToSend = currentAvg;
+              }
+              else if (currentAvg <= batteryAvgToSend)
+              {
+                isCharging = 0;
+                batteryAvgToSend = currentAvg;
+              }
+              else if (currentAvg > batteryAvgToSend)
+              {
+                if(isCharging > 1)
+                {
+                  batteryAvgToSend = currentAvg;
+                }
+                isCharging++;
+              }
+              // else: keep previous value
+            }
+
+            // Reset window
+            batteryWinStartMs = nowMs;
+            batteryWinSum = 0;
+            batteryWinCount = 0;
+          }
+
           payload_full++;
           payload_wr = (payload_wr + 1) % BLE_PAYLOAD_BUFFERS;
 
