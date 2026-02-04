@@ -25,8 +25,8 @@
    Thank you for being part of this journey with us!
 */
 
-// BLE includes
 #include <Arduino.h>
+#include <math.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLE2902.h>
@@ -90,7 +90,7 @@ Adafruit_NeoPixel pixels(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 // Battery monitoring variables
 static unsigned long lastBatteryCheck = 0;
-static const unsigned long BATTERY_CHECK_INTERVAL = 10000; // Interval in milliseconds
+static const unsigned long BATTERY_CHECK_INTERVAL = 5000; // Interval in milliseconds
 static BLEServer *pBLEServer = nullptr;                    // Store server reference for disconnect
 
 // LUT for 1S LiPo (Voltage in ascending order)
@@ -151,7 +151,7 @@ BLECharacteristic *pBatteryCharacteristic;
 uint8_t overallCounter = 0;
 
 // Battery monitoring - stores latest ADC reading from A6
-static volatile uint16_t latestBatteryRaw = 0; // Initially set to 2111 indicating 100% battery to avoid connection issues
+static volatile uint16_t latestBatteryRaw = 0; 
 // Rolling average buffer for battery (2000 samples = 4 seconds @ 500Hz)
 #define BATTERY_AVG_SAMPLES 2000
 static uint16_t batteryBuffer[BATTERY_AVG_SAMPLES] = {0};
@@ -164,8 +164,8 @@ static adc_continuous_handle_t adc_handle = nullptr;
 static bool adc_started = false;
 static SemaphoreHandle_t adc_data_semaphore = nullptr;
 static esp_ble_adv_params_t advParams = {
-    .adv_int_min = 0x0040,
-    .adv_int_max = 0x0050,
+    .adv_int_min = 0x0128,
+    .adv_int_max = 0x0128,
     .adv_type = ADV_TYPE_IND,
     .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
     .channel_map = ADV_CHNL_ALL,
@@ -276,11 +276,15 @@ void checkBatteryAndDisconnect()
 {
   float voltage = (latestBatteryRaw / 1000.0) * 2; // for ESP32C6 v0.1
   voltage = voltage - 0.02;
-  float percentage = interpolatePercentage(voltage);
+  float percentage = floor(interpolatePercentage(voltage));
   // Send battery percentage as single byte (0-100)
   uint8_t batteryByte = (uint8_t)percentage;
-  pBatteryCharacteristic->setValue(&batteryByte, 1);
-  pBatteryCharacteristic->notify();
+  if(batteryBufferFilled)
+  {
+    pBatteryCharacteristic->setValue(&batteryByte, 1);
+    pBatteryCharacteristic->notify();
+  }
+  else return;
   if (percentage > 50.0)
   {
     pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(0, PIXEL_BRIGHTNESS, 0)); // Green when above 50%
@@ -363,17 +367,18 @@ void checkInitialBattery()
   while (millis() - startMillis < 100) // Collect battery voltage samples for 100ms
   {
     int analogValue = analogRead(BATTERY_PIN);
-    float voltage = (analogValue / 1000.0) * 2; // for ESP32C6 v0.1
-    voltage = voltage - 0.02;
-    sum += voltage;
+    sum += analogValue;
     count++;
   }
   // Avoid divide-by-zero (shouldn't happen, but keeps it safe)
   if (count == 0)
     return;
 
-  float initialBatteryVoltage = sum / count;                                      // Average voltage
-  float initialBatteryPercentage = interpolatePercentage(initialBatteryVoltage); // Calculate battery percentage from LUT
+  float initialBatteryRaw = sum / count;
+  latestBatteryRaw = initialBatteryRaw;
+  float voltage = (initialBatteryRaw / 1000.0) * 2; // for ESP32C6 v0.1
+  voltage = voltage - 0.02;
+  float initialBatteryPercentage = floor(interpolatePercentage(voltage)); // Calculate battery percentage from LUT
 
   // If battery is low, slowly blink the neopixel
   if (initialBatteryPercentage < BOOT_MIN_BATTERY)
