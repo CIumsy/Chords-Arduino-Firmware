@@ -161,6 +161,18 @@ static uint16_t batteryWinCount = 0;
 static uint16_t batteryAvgToSend = 0; // 0 when not ready yet
 static uint16_t isCharging = 0; // 0 when not charging
 
+// Sample assembly state (reset on start/stop/disconnect)
+static uint16_t last_vals[NUM_CHANNELS_MAX] = {0};
+static uint32_t have_mask = 0;
+static inline void resetSampleState()
+{
+  have_mask = 0;
+  for (uint8_t i = 0; i < NUM_CHANNELS_MAX; i++)
+  {
+    last_vals[i] = 0;
+  }
+}
+
 // ----- ADC DMA (continuous mode) globals -----
 static adc_continuous_handle_t adc_handle = nullptr;
 static bool adc_started = false;
@@ -220,6 +232,7 @@ class MyServerCallbacks : public BLEServerCallbacks
     payload_wr = 0;
     payload_rd = 0;
     payload_full = 0;
+  resetSampleState();
     adc_stop_requested = true; // Request stop
     esp_ble_gap_start_advertising(&advParams);
   }
@@ -244,6 +257,7 @@ class ControlCallback : public BLECharacteristicCallbacks
       payload_wr = 0;
       payload_rd = 0;
       payload_full = 0;
+  resetSampleState();
       streaming = true;
       adc_start_requested = true; // Request start
     }
@@ -252,6 +266,7 @@ class ControlCallback : public BLECharacteristicCallbacks
       pixels.setPixelColor(0, pixels.Color(0, PIXEL_BRIGHTNESS, 0)); // Green
       pixels.show();
       streaming = false;
+  resetSampleState();
       adc_stop_requested = true; // Request stop
     }
     else if (cmd == "WHORU")
@@ -671,8 +686,7 @@ static inline uint16_t fix_raw_if_needed(uint16_t raw)
 static void handle_adc_dma_and_notify()
 {
   // Assemble Channel data into sample packets
-  static uint16_t last_vals[NUM_CHANNELS_MAX] = {0};
-  static uint32_t have_mask = 0;
+  // use global last_vals/have_mask
   const uint32_t FULL_MASK = (1u << NUM_CHANNELS) - 1;
   uint8_t dma_buf[NUM_CHANNELS_MAX * SOC_ADC_DIGI_RESULT_BYTES * BLOCK_COUNT];
 
