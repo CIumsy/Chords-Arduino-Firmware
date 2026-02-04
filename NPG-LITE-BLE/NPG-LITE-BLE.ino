@@ -135,7 +135,7 @@ uint8_t blePayload[BLE_PAYLOAD_BUFFERS][BLOCK_COUNT * (2 * (NUM_CHANNELS_MAX - 1
 static uint8_t payload_wr = 0;   // buffer currently being filled
 static uint8_t payload_rd = 0;   // next full buffer to notify
 static uint8_t payload_full = 0; // number of full buffers ready
-static uint8_t sampleIndex = 0;    // How many samples accumulated in current batch
+static uint8_t sampleIndex = 0;  // How many samples accumulated in current batch
 volatile bool streaming = false; // True when "START" command is received
 uint8_t mac[6];                  // Array to store 6-byte MAC address
 
@@ -151,15 +151,15 @@ BLECharacteristic *pBatteryCharacteristic;
 uint8_t overallCounter = 0;
 
 // Battery monitoring - stores latest ADC reading from A6
-static volatile uint16_t latestBatteryRaw = 0; 
+static volatile uint16_t latestBatteryRaw = 0;
 
-// Battery averaging: log one battery ADC value per completed data packet,
-// compute an average over BATTERY_CHECK_INTERVAL, and maintain a decreasing-only
+// Battery averaging: log one battery ADC value per completed data packet
+// Average all collected samples once per battery check interval
 static uint32_t batteryWinStartMs = 0;
 static uint32_t batteryWinSum = 0;
 static uint16_t batteryWinCount = 0;
 static uint16_t batteryAvgToSend = 0; // 0 when not ready yet
-static uint16_t isCharging = 0; // 0 when not charging
+static uint16_t isCharging = 0;       // 0 when not charging
 
 // Sample assembly state (reset on start/stop/disconnect)
 static uint16_t last_vals[NUM_CHANNELS_MAX] = {0};
@@ -232,7 +232,7 @@ class MyServerCallbacks : public BLEServerCallbacks
     payload_wr = 0;
     payload_rd = 0;
     payload_full = 0;
-  resetSampleState();
+    resetSampleState();
     adc_stop_requested = true; // Request stop
     esp_ble_gap_start_advertising(&advParams);
   }
@@ -257,7 +257,15 @@ class ControlCallback : public BLECharacteristicCallbacks
       payload_wr = 0;
       payload_rd = 0;
       payload_full = 0;
-  resetSampleState();
+      resetSampleState();
+
+      // Start battery averaging window on streaming start
+      batteryWinStartMs = millis();
+      batteryWinSum = 0;
+      batteryWinCount = 0;
+      batteryAvgToSend = 0;
+      isCharging = 0;
+
       streaming = true;
       adc_start_requested = true; // Request start
     }
@@ -266,7 +274,7 @@ class ControlCallback : public BLECharacteristicCallbacks
       pixels.setPixelColor(0, pixels.Color(0, PIXEL_BRIGHTNESS, 0)); // Green
       pixels.show();
       streaming = false;
-  resetSampleState();
+      resetSampleState();
       adc_stop_requested = true; // Request stop
     }
     else if (cmd == "WHORU")
@@ -447,12 +455,6 @@ void setup()
 
   checkInitialBattery(); // Check initial battery status
 
-  // Initialize battery window variables
-  batteryWinStartMs = millis();
-  batteryWinSum = 0;
-  batteryWinCount = 0;
-  batteryAvgToSend = 0;
-
   pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, 0, 0)); // Red (power on)
   pixels.show();
 
@@ -566,11 +568,6 @@ void loop()
   else
   {
     // Longer delay when idle to maximize sleep time
-    // Reset battery window/latch on streaming start
-    batteryWinStartMs = millis();
-    batteryWinSum = 0;
-    batteryWinCount = 0;
-    batteryAvgToSend = 0;
     delay(100);
   }
 }
@@ -787,7 +784,7 @@ static void handle_adc_dma_and_notify()
               }
               else if (currentAvg > batteryAvgToSend)
               {
-                if(isCharging > 1)
+                if (isCharging > 1)
                 {
                   batteryAvgToSend = currentAvg;
                 }
