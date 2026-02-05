@@ -161,6 +161,7 @@ static uint16_t batteryWinCount = 0;
 static uint16_t batteryAvgToSend = 0; // 0 when not ready yet
 static uint16_t isCharging = 0;       // 0 when not charging
 static uint8_t lastBatteryPct = 255;  // 255 is unset
+static uint8_t consecutiveChargingCheck = 3;
 
 // Sample assembly state (reset on start/stop/disconnect)
 static uint16_t last_vals[NUM_CHANNELS_MAX] = {0};
@@ -329,7 +330,7 @@ void checkBatteryAndDisconnect()
   }
   else // currentBatteryPct > lastBatteryPct
   {
-    if (isCharging > 2)
+    if (isCharging >= consecutiveChargingCheck)
     {
       lastBatteryPct = currentBatteryPct;
     }
@@ -337,7 +338,9 @@ void checkBatteryAndDisconnect()
   }
 
   // Send battery percentage as single byte
-  uint8_t batteryByte = lastBatteryPct;
+  uint8_t pct7 = (lastBatteryPct > 100) ? 100 : lastBatteryPct;  // Set maximum value to 100 to fit under 7 bits
+  uint8_t chargingFlag = (isCharging >= consecutiveChargingCheck) ? 1 : 0;
+  uint8_t batteryByte = (uint8_t)((chargingFlag << 7) | (pct7));
   pBatteryCharacteristic->setValue(&batteryByte, 1);
   pBatteryCharacteristic->notify();
   if (percentage > 50.0)
