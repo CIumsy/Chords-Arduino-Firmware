@@ -160,6 +160,7 @@ static uint32_t batteryWinSum = 0;
 static uint16_t batteryWinCount = 0;
 static uint16_t batteryAvgToSend = 0; // 0 when not ready yet
 static uint16_t isCharging = 0;       // 0 when not charging
+static uint8_t lastBatteryPct = 255;  // 255 is unset
 
 // Sample assembly state (reset on start/stop/disconnect)
 static uint16_t last_vals[NUM_CHANNELS_MAX] = {0};
@@ -227,12 +228,15 @@ class MyServerCallbacks : public BLEServerCallbacks
     digitalWrite(LED_BUILTIN, LOW);
 
     streaming = false;
-    // Reset payload state on disconnect
+    // Reset payload state and battery states on disconnect
     sampleIndex = 0;
     payload_wr = 0;
     payload_rd = 0;
     payload_full = 0;
     resetSampleState();
+    lastBatteryPct = 255;
+    isCharging = 0;
+    
     adc_stop_requested = true; // Request stop
     esp_ble_gap_start_advertising(&advParams);
   }
@@ -265,6 +269,7 @@ class ControlCallback : public BLECharacteristicCallbacks
       batteryWinCount = 0;
       batteryAvgToSend = 0;
       isCharging = 0;
+      lastBatteryPct = 255;
 
       streaming = true;
       adc_start_requested = true; // Request start
@@ -305,8 +310,33 @@ void checkBatteryAndDisconnect()
   float voltage = (batteryAvgToSend / 1000.0) * 2; // for ESP32C6 v0.1
   voltage = voltage - 0.02;
   float percentage = ceil(interpolatePercentage(voltage));
-  // Send battery percentage as single byte (0-100)
-  uint8_t batteryByte = (uint8_t)percentage;
+
+  // Send decreased battery percentage immediately
+  // Send increased battery percentage after 3 consecutive checks
+  uint8_t currentBatteryPct = (uint8_t)percentage;
+
+  if (lastBatteryPct == 255)
+  {
+    // First valid percentage
+    lastBatteryPct = currentBatteryPct;
+    isCharging = 0;
+  }
+  else if (currentBatteryPct <= lastBatteryPct)
+  {
+    lastBatteryPct = currentBatteryPct;
+    isCharging = 0;
+  }
+  else // currentBatteryPct > lastBatteryPct
+  {
+    if (isCharging > 1)
+    {
+      lastBatteryPct = currentBatteryPct;
+    }
+    isCharging++;
+  }
+
+  // Send battery percentage as single byte
+  uint8_t batteryByte = lastBatteryPct;
   pBatteryCharacteristic->setValue(&batteryByte, 1);
   pBatteryCharacteristic->notify();
   if (percentage > 50.0)
@@ -773,24 +803,7 @@ static void handle_adc_dma_and_notify()
             if (batteryWinCount > 0)
             {
               uint16_t currentAvg = (uint16_t)(batteryWinSum / batteryWinCount);
-              if (batteryAvgToSend == 0)
-              {
-                batteryAvgToSend = currentAvg;
-              }
-              else if (currentAvg <= batteryAvgToSend)
-              {
-                isCharging = 0;
-                batteryAvgToSend = currentAvg;
-              }
-              else if (currentAvg > batteryAvgToSend)
-              {
-                if (isCharging > 1)
-                {
-                  batteryAvgToSend = currentAvg;
-                }
-                isCharging++;
-              }
-              // else: keep previous value
+              batteryAvgToSend = currentAvg;
             }
 
             // Reset window
