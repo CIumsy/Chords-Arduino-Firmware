@@ -302,6 +302,7 @@ class ControlCallback : public BLECharacteristicCallbacks
 
 // -------Battery Functions-------
 
+// Check battery status while streaming and notify every 10 seconds
 void checkBatteryAndDisconnect()
 {
   if (batteryAvgToSend == 0)
@@ -312,7 +313,7 @@ void checkBatteryAndDisconnect()
   float percentage = ceil(interpolatePercentage(voltage));
 
   // Send decreased battery percentage immediately
-  // Send increased battery percentage after 3 consecutive checks
+  // Send increased battery percentage after 4 consecutive increases
   uint8_t currentBatteryPct = (uint8_t)percentage;
 
   if (lastBatteryPct == 255)
@@ -328,7 +329,7 @@ void checkBatteryAndDisconnect()
   }
   else // currentBatteryPct > lastBatteryPct
   {
-    if (isCharging > 1)
+    if (isCharging > 2)
     {
       lastBatteryPct = currentBatteryPct;
     }
@@ -376,6 +377,7 @@ void checkBatteryAndDisconnect()
   }
 }
 
+// Set device to deep sleep when battery is low
 void sleepWhenLowBattery()
 {
   // Fader-style slow blink (10 cycles)
@@ -413,6 +415,7 @@ void sleepWhenLowBattery()
   esp_deep_sleep_start(); // Enter deep sleep after blinking sequence
 }
 
+// Check battery on boot and go to deep sleep if battery < BOOT_MIN_BATTERY
 void checkInitialBattery()
 {
   int count = 0;
@@ -424,7 +427,7 @@ void checkInitialBattery()
     sum += analogValue;
     count++;
   }
-  // Avoid divide-by-zero (shouldn't happen, but keeps it safe)
+  // Avoid divide-by-zero 
   if (count == 0)
     return;
 
@@ -440,7 +443,7 @@ void checkInitialBattery()
   }
 }
 
-// --------Check for Playmate-------
+// --------Check for Beast Playmate-------
 
 void checkChannelCount()
 {
@@ -602,7 +605,7 @@ void loop()
   }
 }
 
-// ====== ADC DMA implementation ======
+// ----- ADC DMA implementation -----
 
 // Maps physical ADC channel id → logical index 0..NUM_CHANNELS-1
 static int8_t hw2idx[10];
