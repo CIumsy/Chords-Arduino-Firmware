@@ -343,14 +343,19 @@ void checkBatteryAndDisconnect()
   uint8_t batteryByte = (uint8_t)((chargingFlag << 7) | (pct7));
   pBatteryCharacteristic->setValue(&batteryByte, 1);
   pBatteryCharacteristic->notify();
-  if (percentage > 50.0)
+  if (percentage > 70.0)
   {
-    pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(0, PIXEL_BRIGHTNESS, 0)); // Green when above 50%
+    pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(0, PIXEL_BRIGHTNESS, 0)); // Green when above 70%
     pixels.show();
   }
-  else if (percentage <= 50.0 && percentage >= STREAMING_MIN_BATTERY)
+  else if (percentage <= 70.0 && percentage > 20.0)
   {
-    pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(15, 4, 0)); // Orange when below 50%
+    pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(15, 4, 0)); // Orange when between 20 and 70
+    pixels.show();
+  }
+  else if (percentage <= 20.0 && percentage >= STREAMING_MIN_BATTERY)
+  {
+    pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(PIXEL_BRIGHTNESS, 0, 0)); // Red when below 20%
     pixels.show();
   }
   else if (percentage < STREAMING_MIN_BATTERY)
