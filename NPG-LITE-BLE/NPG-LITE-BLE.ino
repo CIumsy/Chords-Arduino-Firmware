@@ -394,9 +394,7 @@ void checkBatteryAndDisconnect()
   }
 
   // Send battery percentage as single byte
-  uint8_t pct7 = (lastBatteryPct > 100) ? 100 : lastBatteryPct; // Set maximum value to 100 to fit under 7 bits
-  uint8_t chargingFlag = (isCharging >= consecutiveChargingCheck) ? 1 : 0;
-  uint8_t batteryByte = (uint8_t)((chargingFlag << 7) | (pct7));
+  uint8_t batteryByte = lastBatteryPct;
   pBatteryCharacteristic->setValue(&batteryByte, 1);
   pBatteryCharacteristic->notify();
   if (percentage > 70.0)
