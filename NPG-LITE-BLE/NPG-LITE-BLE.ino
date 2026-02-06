@@ -39,6 +39,7 @@
 #include "esp_mac.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 
 // ADC includes
 #include "esp_bt.h"                 // release Classic BT memory
@@ -162,6 +163,8 @@ static uint16_t batteryAvgToSend = 0; // 0 when not ready yet
 static uint16_t isCharging = 0;       // 0 when not charging
 static uint8_t lastBatteryPct = 255;  // 255 is unset
 static uint8_t consecutiveChargingCheck = 3;
+static TaskHandle_t ledBlinkTask = NULL;
+static volatile int ledBlinkCycles = -1; // -1=off, 0=indefinite, >0 = that many cycles
 
 // Sample assembly state (reset on start/stop/disconnect)
 static uint16_t last_vals[NUM_CHANNELS_MAX] = {0};
@@ -207,7 +210,7 @@ class MyServerCallbacks : public BLEServerCallbacks
     pixels.setPixelColor(0, pixels.Color(0, PIXEL_BRIGHTNESS, 0)); // Green
     pixels.show();
     digitalWrite(LED_BUILTIN, HIGH);
-    delay(200);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
     digitalWrite(LED_BUILTIN, LOW);
 
     // Apply -3 dBm to the active connection
@@ -221,11 +224,11 @@ class MyServerCallbacks : public BLEServerCallbacks
     pixels.show();
     // Vibrate twice on disconnect
     digitalWrite(LED_BUILTIN, HIGH);
-    delay(200);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
     digitalWrite(LED_BUILTIN, LOW);
-    delay(100);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
     digitalWrite(LED_BUILTIN, HIGH);
-    delay(200);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
     digitalWrite(LED_BUILTIN, LOW);
 
     streaming = false;
@@ -237,7 +240,8 @@ class MyServerCallbacks : public BLEServerCallbacks
     resetSampleState();
     lastBatteryPct = 255;
     isCharging = 0;
-    
+    ledBlinkCycles = -1;
+
     adc_stop_requested = true; // Request stop
     esp_ble_gap_start_advertising(&advParams);
   }
@@ -271,6 +275,7 @@ class ControlCallback : public BLECharacteristicCallbacks
       batteryAvgToSend = 0;
       isCharging = 0;
       lastBatteryPct = 255;
+      ledBlinkCycles = -1;
 
       streaming = true;
       adc_start_requested = true; // Request start
@@ -300,6 +305,57 @@ class ControlCallback : public BLECharacteristicCallbacks
     }
   }
 };
+
+void neoPixelTask(void *parameter)
+{
+  while (true)
+  {
+    if (ledBlinkCycles == -1)
+    {
+      vTaskDelay(100 / portTICK_PERIOD_MS);
+      continue;
+    }
+
+    uint8_t cycles = 0;
+    uint8_t fader = 100;
+    bool decreasing = true;
+
+    // run indefinitely when ledBlinkCycles == 0, else run ledBlinkCycles times
+    while (ledBlinkCycles != -1 && (ledBlinkCycles == 0 || cycles < (uint8_t)ledBlinkCycles))
+    {
+      pixels.clear();
+      pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(fader, 0, 0));
+      pixels.show();
+      vTaskDelay(20 / portTICK_PERIOD_MS);
+
+      if (decreasing)
+      {
+        fader = fader - 2;
+        if (fader < 10)
+        {
+          decreasing = false;
+        }
+      }
+      else
+      {
+        fader = fader + 2;
+        if (fader > 100)
+        {
+          decreasing = true;
+          cycles++;
+        }
+      }
+    }
+
+    // If it was a finite request, clear neopixel after completion
+    if (ledBlinkCycles > 0)
+    {
+      pixels.clear();
+      pixels.show();
+      ledBlinkCycles = -1; // stop repeating the 10-cycle blink forever
+    }
+  }
+}
 
 // -------Battery Functions-------
 
@@ -338,29 +394,35 @@ void checkBatteryAndDisconnect()
   }
 
   // Send battery percentage as single byte
-  uint8_t pct7 = (lastBatteryPct > 100) ? 100 : lastBatteryPct;  // Set maximum value to 100 to fit under 7 bits
+  uint8_t pct7 = (lastBatteryPct > 100) ? 100 : lastBatteryPct; // Set maximum value to 100 to fit under 7 bits
   uint8_t chargingFlag = (isCharging >= consecutiveChargingCheck) ? 1 : 0;
   uint8_t batteryByte = (uint8_t)((chargingFlag << 7) | (pct7));
   pBatteryCharacteristic->setValue(&batteryByte, 1);
   pBatteryCharacteristic->notify();
   if (percentage > 70.0)
   {
+    ledBlinkCycles = -1;
     pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(0, PIXEL_BRIGHTNESS, 0)); // Green when above 70%
     pixels.show();
   }
   else if (percentage <= 70.0 && percentage > 20.0)
   {
+    ledBlinkCycles = -1;
     pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(15, 4, 0)); // Orange when between 20 and 70
     pixels.show();
   }
-  else if (percentage <= 20.0 && percentage >= STREAMING_MIN_BATTERY)
+  else if (percentage <= 20.0 && percentage > 10.0)
   {
+    ledBlinkCycles = -1;
     pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(PIXEL_BRIGHTNESS, 0, 0)); // Red when below 20%
     pixels.show();
   }
+  else if (percentage <= 10.0 && percentage >= STREAMING_MIN_BATTERY)
+  {
+    ledBlinkCycles = 0; // blink until battery is in the range of 5-10%
+  }
   else if (percentage < STREAMING_MIN_BATTERY)
   {
-
     // Stop streaming
     streaming = false;
 
@@ -388,38 +450,11 @@ void checkBatteryAndDisconnect()
 // Set device to deep sleep when battery is low
 void sleepWhenLowBattery()
 {
-  // Fader-style slow blink (10 cycles)
-  uint8_t cycles = 0;
-  uint16_t fader = 100;
-  bool decreasing = true;
-
-  while (cycles < 10)
+  ledBlinkCycles = 10;         // request 10 cycles (task runs the algo)
+  while (ledBlinkCycles != -1) // wait until task finishes
   {
-    pixels.clear();
-    pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(fader, 0, 0));
-    pixels.show();
-    delay(20);
-
-    if (decreasing)
-    {
-      fader = fader - 2;
-      if (fader < 10)
-      {
-        decreasing = false;
-      }
-    }
-    else
-    {
-      fader = fader + 2;
-      if (fader > 100)
-      {
-        decreasing = true;
-        cycles++;
-      }
-    }
+    vTaskDelay(50 / portTICK_PERIOD_MS);
   }
-  pixels.clear();
-  pixels.show();
   esp_deep_sleep_start(); // Enter deep sleep after blinking sequence
 }
 
@@ -435,7 +470,7 @@ void checkInitialBattery()
     sum += analogValue;
     count++;
   }
-  // Avoid divide-by-zero 
+  // Avoid divide-by-zero
   if (count == 0)
     return;
 
@@ -468,7 +503,7 @@ void checkChannelCount()
       isBeastPlaymate = true;
     if (digitalRead(A5) == LOW)
       isBeastPlaymate = true;
-    delay(1);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
   }
   // Restore high-impedance inputs before ADC use
   pinMode(A3, INPUT);
@@ -486,6 +521,8 @@ void setup()
 {
   // ----- LEDs -----
   pixels.begin();
+
+  xTaskCreatePinnedToCore(neoPixelTask, "NeoPixelTask", 2048, NULL, 1, &ledBlinkTask, 0);
 
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
@@ -609,7 +646,7 @@ void loop()
   else
   {
     // Longer delay when idle to maximize sleep time
-    delay(100);
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
 
