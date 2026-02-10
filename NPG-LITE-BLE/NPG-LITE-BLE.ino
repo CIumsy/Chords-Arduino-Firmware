@@ -616,7 +616,6 @@ void loop()
   
   if (adc_stop_requested)
   {
-    adc_start_requested = false;
     adc_dma_stop();
     adc_stop_requested = false;
   }
