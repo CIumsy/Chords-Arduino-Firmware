@@ -613,16 +613,19 @@ void setup()
 
 void loop()
 {
+  
+  if (adc_stop_requested)
+  {
+    adc_start_requested = false;
+    adc_dma_stop();
+    adc_stop_requested = false;
+  }
+
   // Handle start/stop requests of adc_continuous_mode
   if (adc_start_requested)
   {
     adc_dma_start();
     adc_start_requested = false;
-  }
-  if (adc_stop_requested)
-  {
-    adc_dma_stop();
-    adc_stop_requested = false;
   }
 
   if (streaming)
@@ -635,7 +638,7 @@ void loop()
       checkBatteryAndDisconnect();
     }
 
-    // Block until semaphore is given by ISR (allows deep sleep)
+    // Block until semaphore is given by ISR 
     if (xSemaphoreTake(adc_data_semaphore, portMAX_DELAY) == pdTRUE)
     {
       handle_adc_dma_and_notify();
@@ -643,7 +646,7 @@ void loop()
   }
   else
   {
-    // Longer delay when idle to maximize sleep time
+    // Longer delay when idle 
     vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
