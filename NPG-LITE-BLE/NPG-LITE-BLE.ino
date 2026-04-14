@@ -495,12 +495,22 @@ void checkChannelCount()
   pinMode(A5, INPUT_PULLUP);
   for (int i = 0; i < 10; i++)
   { // Collect samples for 10ms
-    if (digitalRead(A3) == LOW)
-      isBeastPlaymate = true;
-    if (digitalRead(A4) == LOW)
-      isBeastPlaymate = true;
-    if (digitalRead(A5) == LOW)
-      isBeastPlaymate = true;
+    isBeastPlaymate = true; // Assume it's a Beast Playmate until we see a high on any of the specific pins
+    if (digitalRead(A3) == HIGH)
+    {
+      isBeastPlaymate = false;
+      break;
+    }
+    if (digitalRead(A4) == HIGH)
+    {
+      isBeastPlaymate = false;
+      break;
+    }
+    if (digitalRead(A5) == HIGH)
+    {
+      isBeastPlaymate = false;
+      break;
+    }
     vTaskDelay(1 / portTICK_PERIOD_MS);
   }
   // Restore high-impedance inputs before ADC use
