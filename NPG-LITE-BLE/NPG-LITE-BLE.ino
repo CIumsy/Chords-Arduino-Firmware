@@ -326,7 +326,6 @@ void neoPixelTask(void *parameter)
     // run indefinitely when ledBlinkCycles == 0, else run ledBlinkCycles times
     while (ledBlinkCycles != -1 && (ledBlinkCycles == 0 || cycles < (uint8_t)ledBlinkCycles))
     {
-      pixels.clear();
       pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(fader, 0, 0));
       pixels.show();
       vTaskDelay(20 / portTICK_PERIOD_MS);
