@@ -54,10 +54,12 @@
 // Store chip revision number (for optional raw fixup if needed)
 uint32_t chiprev = efuse_hal_chip_revision();
 #define LED_BUILTIN 7
+#define BUZZER_PIN 8
 #define PIXEL_PIN 15
 #define PIXEL_COUNT 6
 #elif defined(CONFIG_IDF_TARGET_ESP32C3)
 #define LED_BUILTIN 6
+#define BUZZER_PIN 8
 #define PIXEL_PIN 3
 #define PIXEL_COUNT 4
 #else
@@ -77,7 +79,7 @@ uint32_t chiprev = efuse_hal_chip_revision();
 static uint8_t NUM_CHANNELS = 4;      // Number of BioAmp channels + 1 channel for battery
 static uint8_t SINGLE_SAMPLE_LEN = 0; // Each sample: (No. of bioAmp channels * 2 bytes) + 1 counter
 static uint16_t NEW_PACKET_LEN = 0;   // Packet length (BLOCK_COUNT * SINGLE_SAMPLE_LEN)
-static bool isBeastPlaymate = false;
+static uint8_t Playmate = 0;          // 0=Explorer(3 channels), 1=Ninja(3 channels), 2=Beast(6 channels)
 
 // Recompute packet sizes to adjust for channel count changes
 static inline void recomputePacketSizes()
@@ -486,39 +488,41 @@ void checkInitialBattery()
 
 // --------Check for Beast Playmate-------
 
-void checkChannelCount()
+void checkPlaymate()
 {
-  isBeastPlaymate = false;
-  // Check for Beast Playmate (6 channels)
-  pinMode(A3, INPUT_PULLUP);
-  pinMode(A4, INPUT_PULLUP);
-  pinMode(A5, INPUT_PULLUP);
-  for (int i = 0; i < 10; i++)
-  { // Collect samples for 10ms
-    isBeastPlaymate = true; // Assume it's a Beast Playmate until we see a high on any of the specific pins
-    if (digitalRead(A3) == HIGH)
-    {
-      isBeastPlaymate = false;
-      break;
-    }
-    if (digitalRead(A4) == HIGH)
-    {
-      isBeastPlaymate = false;
-      break;
-    }
-    if (digitalRead(A5) == HIGH)
-    {
-      isBeastPlaymate = false;
-      break;
-    }
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+  pinMode(LED_BUILTIN, INPUT_PULLUP);
+  pinMode(BUZZER_PIN, INPUT_PULLUP);
+  if(digitalRead(LED_BUILTIN) == HIGH && digitalRead(BUZZER_PIN) == HIGH)
+  {
+    Playmate = 0; // Explorer (3 channels BioAmp, no buzzer and vibration motor)
   }
-  // Restore high-impedance inputs before ADC use
-  pinMode(A3, INPUT);
-  pinMode(A4, INPUT);
-  pinMode(A5, INPUT);
+  else
+  {
+    Playmate = 1; // Assume it's a Ninja Playmate until we detect Beast
+    // Check for Beast Playmate 
+    pinMode(A3, INPUT_PULLUP);
+    pinMode(A4, INPUT_PULLUP);
+    pinMode(A5, INPUT_PULLUP);
+    unsigned long start = millis();
+    while (millis() - start < 100) 
+    {
+      if (digitalRead(A3) == LOW || digitalRead(A4) == LOW || digitalRead(A5) == LOW) 
+      {
+        Playmate = 2;
+        break;
+      }
+    }
+    // Restore high-impedance inputs before ADC use
+    pinMode(A3, INPUT);
+    pinMode(A4, INPUT);
+    pinMode(A5, INPUT);
+  }
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(BUZZER_PIN, LOW);
   // Configure active channels and packet sizes
-  if (isBeastPlaymate)
+  if (Playmate==2) // Beast Playmate with 6 total BioAmp channels
     NUM_CHANNELS = 7;
   else
     NUM_CHANNELS = 4;
@@ -537,7 +541,7 @@ void setup()
 
   setCpuFrequencyMhz(80);
 
-  checkChannelCount(); // Check for Beast Playmate
+  checkPlaymate(); // Check for Beast Playmate
 
   checkInitialBattery(); // Check initial battery status
 
@@ -560,7 +564,7 @@ void setup()
 
   // ----- Initialize BLE -----
   char deviceName[36];
-  if (isBeastPlaymate)
+  if (Playmate==2) // Beast Playmate with 6 total BioAmp channels
     sprintf(deviceName, "NPG-Lite-6CH:%02X:%02X", mac[4], mac[5]);
   else
     sprintf(deviceName, "NPG-Lite-3CH:%02X:%02X", mac[4], mac[5]);
