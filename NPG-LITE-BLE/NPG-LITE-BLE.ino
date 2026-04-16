@@ -53,6 +53,7 @@
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 // Store chip revision number (for optional raw fixup if needed)
 uint32_t chiprev = efuse_hal_chip_revision();
+#define GAIN_PIN 14
 #define LED_BUILTIN 7
 #define BUZZER_PIN 8
 #define PIXEL_PIN 15
