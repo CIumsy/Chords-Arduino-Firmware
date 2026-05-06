@@ -522,8 +522,8 @@ void checkPlaymate()
     pinMode(A5, INPUT);
   }
   pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
+  pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
   // Configure active channels and packet sizes
   if (Playmate == VIBZ_PLUS_PLAYMATE)
