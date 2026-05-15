@@ -47,24 +47,31 @@
 #include "hal/adc_types.h"          // adc_atten_t, bit width, etc.
 #include "soc/soc_caps.h"           // SOC_ADC_DIGI_RESULT_BYTES
 
+// Supported Playmates
+#define PROTO_PLAYMATE 0      // Proto (3 BioAmp channels, no buzzer or vibration motor)
+#define VIBZ_PLAYMATE 1       // Vibz (3 BioAmp channels, buzzer and vibration motor)
+#define VIBZ_PLUS_PLAYMATE 2  // Vibz Plus (6 BioAmp channels, buzzer and vibration motor)
+
 // ----- Chip-specific Pin Definitions -----
-//
 // Use the ESP-IDF config macros to detect the chip.
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 // Store chip revision number (for optional raw fixup if needed)
 uint32_t chiprev = efuse_hal_chip_revision();
+#define GAIN_PIN 14
 #define LED_BUILTIN 7
+#define BUZZER_PIN 8
 #define PIXEL_PIN 15
 #define PIXEL_COUNT 6
 #elif defined(CONFIG_IDF_TARGET_ESP32C3)
 #define LED_BUILTIN 6
+#define BUZZER_PIN 8
 #define PIXEL_PIN 3
 #define PIXEL_COUNT 4
 #else
 #error "Unsupported board: Please target either ESP32-C6 or ESP32-C3 in your Board Manager."
 #endif
 
-#define NUM_CHANNELS_MAX 7        // Max channels supported (Beast Playmate)
+#define NUM_CHANNELS_MAX 7        // Max channels supported (Vibz Plus Playmate)
 #define BLE_PAYLOAD_BUFFERS 2     // Number of buffers for BLE payloads to prevent overflow (Change if you need more buffers)
 #define PIXEL_BRIGHTNESS 7        // Brightness of Neopixel LED
 #define BLOCK_COUNT 10            // Batch size: 10 samples per notification
@@ -77,7 +84,7 @@ uint32_t chiprev = efuse_hal_chip_revision();
 static uint8_t NUM_CHANNELS = 4;      // Number of BioAmp channels + 1 channel for battery
 static uint8_t SINGLE_SAMPLE_LEN = 0; // Each sample: (No. of bioAmp channels * 2 bytes) + 1 counter
 static uint16_t NEW_PACKET_LEN = 0;   // Packet length (BLOCK_COUNT * SINGLE_SAMPLE_LEN)
-static bool isBeastPlaymate = false;
+static uint8_t Playmate = PROTO_PLAYMATE; // PROTO_PLAYMATE, VIBZ_PLAYMATE, or VIBZ_PLUS_PLAYMATE
 
 // Recompute packet sizes to adjust for channel count changes
 static inline void recomputePacketSizes()
@@ -323,7 +330,6 @@ void neoPixelTask(void *parameter)
     // run indefinitely when ledBlinkCycles == 0, else run ledBlinkCycles times
     while (ledBlinkCycles != -1 && (ledBlinkCycles == 0 || cycles < (uint8_t)ledBlinkCycles))
     {
-      pixels.clear();
       pixels.setPixelColor(PIXEL_COUNT - 1, pixels.Color(fader, 0, 0));
       pixels.show();
       vTaskDelay(20 / portTICK_PERIOD_MS);
@@ -484,31 +490,43 @@ void checkInitialBattery()
   }
 }
 
-// --------Check for Beast Playmate-------
+// --------Check Playmate-------
 
-void checkChannelCount()
+void checkPlaymate()
 {
-  isBeastPlaymate = false;
-  // Check for Beast Playmate (6 channels)
-  pinMode(A3, INPUT_PULLUP);
-  pinMode(A4, INPUT_PULLUP);
-  pinMode(A5, INPUT_PULLUP);
-  for (int i = 0; i < 10; i++)
-  { // Collect samples for 10ms
-    if (digitalRead(A3) == LOW)
-      isBeastPlaymate = true;
-    if (digitalRead(A4) == LOW)
-      isBeastPlaymate = true;
-    if (digitalRead(A5) == LOW)
-      isBeastPlaymate = true;
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+  pinMode(LED_BUILTIN, INPUT_PULLUP);
+  pinMode(BUZZER_PIN, INPUT_PULLUP);
+  if(digitalRead(LED_BUILTIN) == HIGH && digitalRead(BUZZER_PIN) == HIGH)
+  {
+    Playmate = PROTO_PLAYMATE;
   }
-  // Restore high-impedance inputs before ADC use
-  pinMode(A3, INPUT);
-  pinMode(A4, INPUT);
-  pinMode(A5, INPUT);
+  else
+  {
+    Playmate = VIBZ_PLAYMATE; // Assume Vibz until Vibz Plus is detected
+    // Check for Vibz Plus Playmate
+    pinMode(A3, INPUT_PULLUP);
+    pinMode(A4, INPUT_PULLUP);
+    pinMode(A5, INPUT_PULLUP);
+    unsigned long start = millis();
+    while (millis() - start < 100) 
+    {
+      if (digitalRead(A3) == LOW || digitalRead(A4) == LOW || digitalRead(A5) == LOW) 
+      {
+        Playmate = VIBZ_PLUS_PLAYMATE;
+        break;
+      }
+    }
+    // Restore high-impedance inputs before ADC use
+    pinMode(A3, INPUT);
+    pinMode(A4, INPUT);
+    pinMode(A5, INPUT);
+  }
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
   // Configure active channels and packet sizes
-  if (isBeastPlaymate)
+  if (Playmate == VIBZ_PLUS_PLAYMATE)
     NUM_CHANNELS = 7;
   else
     NUM_CHANNELS = 4;
@@ -527,7 +545,7 @@ void setup()
 
   setCpuFrequencyMhz(80);
 
-  checkChannelCount(); // Check for Beast Playmate
+  checkPlaymate();
 
   checkInitialBattery(); // Check initial battery status
 
@@ -550,7 +568,7 @@ void setup()
 
   // ----- Initialize BLE -----
   char deviceName[36];
-  if (isBeastPlaymate)
+  if (Playmate == VIBZ_PLUS_PLAYMATE)
     sprintf(deviceName, "NPG-Lite-6CH:%02X:%02X", mac[4], mac[5]);
   else
     sprintf(deviceName, "NPG-Lite-3CH:%02X:%02X", mac[4], mac[5]);
